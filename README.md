@@ -1,34 +1,15 @@
 # 🔄 save-my-session
 
-> Smart project state snapshot tool for seamless AI coding agent handoffs
+> Transfer coding sessions between AI agents — Claude Code, Gemini CLI, and Codex.
 
-## 問題
+當你手上有好幾個 AI Coding Agent 的訂閱（Claude Code、Gemini CLI、Codex），最痛的不是額度用完，而是**切換時整段 context 要重新來過**。`save-my-session` 把你在一個 agent 的 session 檔直接轉成另一家的原生格式，下個 agent 打開就是完整的對話歷史，不用再手抄 briefing。
 
-「資源有限，需求無限」。當你使用多個 AI Coding Agent（Claude Code、Cursor、Copilot 等）開發專案時，經常遇到：
+## 功能
 
-- ❌ **訂閱額度用完**：需要切換到另一個 Agent
-- ❌ **Context 重建成本高**：新 Agent 需要重新理解專案、讀 git diff、猜測狀況
-- ❌ **Token 浪費嚴重**：每次交接都要花費大量 tokens
-
-## 解決方案
-
-`save-my-session` 不是「轉移完整對話」，而是**壓縮專案理解**：
-
-```
-完整對話歷史（數千 tokens） ❌
-         ↓
-專案狀態快照（數百 tokens） ✅
-```
-
-### 核心概念
-
-生成一個 `project_state.yml`，包含：
-
-- ✅ **專案架構**：技術棧、關鍵檔案
-- ✅ **當前任務**：目標、進度、下一步
-- ✅ **決策脈絡**：為什麼這樣做
-- ✅ **Git 狀態**：分支、未提交變更
-- ✅ **重要 Context**：筆記、潛在問題
+- **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
+- **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md`），讓 agent 自己偵測額度、主動建議交接。
+- **`--append`**：把另一個 agent 做過的新進度（時間戳比目標 session 最後一則還新的訊息）回寫到原本的 session，方便來回切換。
+- **`--list`**：列出目前專案所有 session，附帶最後一句 user 訊息、訊息數、時間區間。
 
 ## 安裝
 
@@ -36,349 +17,88 @@
 npm install -g save-my-session
 ```
 
-或在專案中使用：
+安裝完可選擇執行：
 
 ```bash
-npm install --save-dev save-my-session
+save-my-session install
 ```
 
-## 快速開始
+這會在 `~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md` 裡各注入一段指示（用 `<!-- save-my-session:start -->` 標記包起來，隨時可 `uninstall` 移除）。裝完後各 agent 會在 session 變長或遇到 rate limit 時主動提醒使用者可以交接。
 
-### 1. 初始化專案狀態
+## 用法
+
+> 所有指令都以 `cwd` 當作專案識別，**請在專案根目錄執行**，或用 `--cwd <path>` 指定。
+
+### 列出當前專案的 session
 
 ```bash
-save-my-session init
+save-my-session transfer --from claude --list
 ```
 
-這會生成 `project_state.yml`，自動分析：
-- 專案架構和技術棧
-- Git 狀態
-- 依賴套件
+```
+📋 Claude Code sessions for: /path/to/project
 
-### 2. 在開發過程中記錄
+  #1 (latest)
+     "好，開始做 ABC"
+     58 user / 155 assistant messages
+     4/16 10:51 → 4/18 10:24
+     /Users/you/.claude/projects/-path-to-project/<uuid>.jsonl
+  ...
+```
 
-**記錄重要決策：**
+### 轉移 session
+
+最新的 Claude session → Gemini：
 
 ```bash
-save-my-session update decision "使用 PostgreSQL | 需要 JSONB 支援"
+save-my-session transfer --from claude --to gemini
 ```
 
-**標記進度：**
+指定某個 session 檔：
 
 ```bash
-save-my-session update progress "完成使用者認證 API"
+save-my-session transfer --from gemini --to codex --session <path>
 ```
 
-**添加筆記：**
+### 跨來回交接：把新進度 append 回原本的 session
+
+情境：Claude 做了一段 → transfer 到 Gemini 繼續做 → 想回 Claude 時，不想開新 session，想接回原本那個：
 
 ```bash
-save-my-session update note "CORS 設定需要調整"
+save-my-session transfer --from gemini --to claude --append <原本的 claude session 路徑>
 ```
 
-**記錄阻礙：**
+只有 timestamp 比 target 最後一則訊息**還新**的訊息會被 append 進去。
+
+### 移除注入的指示
 
 ```bash
-save-my-session update blocker "等待 API key"
+save-my-session uninstall
 ```
 
-### 3. 切換到新 Agent
-
-當你需要切換到另一個 AI Agent：
-
-```bash
-save-my-session restore --agent "Cursor"
-```
-
-會生成一份結構化的 context，你可以直接貼給新 Agent：
-
-```markdown
-# Project Handoff: my-project
-
-## 📦 Project Overview
-Architecture: Full-stack application
-Tech Stack: React, TypeScript, FastAPI, PostgreSQL
-
-## 🎯 Current Task
-Goal: 實作使用者登入功能
-Status: 70% 完成
-
-Completed:
-- 建立 User model
-- 實作 JWT token 生成
-
-Next Steps:
-- 實作前端登入表單
-- 整合 API endpoint
-
-## 💡 Key Decisions
-1. 使用 JWT 而非 Session
-   Reason: 前後端分離，需要 stateless auth
-...
-```
-
-### 4. 查看當前狀態
-
-```bash
-save-my-session info
-```
-
-## 命令參考
-
-### `init`
-
-初始化專案狀態
-
-```bash
-save-my-session init
-```
-
-### `snapshot`
-
-手動生成快照（通常不需要，`init` 和 `update` 會自動更新）
-
-```bash
-save-my-session snapshot [options]
-
-Options:
-  -o, --output <path>  輸出檔案路徑（預設：project_state.yml）
-  -v, --verbose        詳細輸出
-```
-
-### `update`
-
-增量更新專案狀態
-
-```bash
-save-my-session update <type> <message>
-
-Types:
-  decision  - 記錄架構或技術決策
-  progress  - 標記完成的工作
-  blocker   - 記錄阻礙進度的問題
-  note      - 添加重要筆記
-```
-
-**決策格式：**
-
-```bash
-save-my-session update decision "決策 | 原因 | 影響（可選）"
-```
-
-範例：
-
-```bash
-save-my-session update decision "使用 Redis 做快取 | 改善 API 回應時間 | 需要額外維護 Redis 服務"
-```
-
-### `restore`
-
-生成給新 Agent 的 context
-
-```bash
-save-my-session restore [options]
-
-Options:
-  -i, --input <path>    輸入檔案路徑（預設：project_state.yml）
-  -a, --agent <name>    目標 Agent 名稱
-  -f, --format <type>   輸出格式（markdown|plain）
-```
-
-### `info`
-
-顯示當前專案狀態摘要
-
-```bash
-save-my-session info
-```
-
-### `examples`
-
-顯示使用範例
-
-```bash
-save-my-session examples
-```
-
-## 工作流程範例
-
-### 完整開發週期
-
-```bash
-# 1. 開始新專案
-save-my-session init
-
-# 2. 開發過程中記錄決策
-save-my-session update decision "使用 Tailwind CSS | 快速原型開發"
-
-# 3. 標記完成的工作
-save-my-session update progress "完成首頁 UI"
-save-my-session update progress "整合 Stripe 付款"
-
-# 4. 記錄重要筆記
-save-my-session update note "生產環境需要設定 STRIPE_SECRET_KEY"
-
-# 5. 額度用完，切換 Agent
-save-my-session restore --agent "Claude Code"
-# 複製輸出的 markdown，貼到新 Agent
-
-# 6. 在新 Agent 繼續開發...
-save-my-session update progress "完成付款成功頁面"
-
-# 7. 再次切換
-save-my-session restore --agent "Cursor"
-```
-
-## project_state.yml 結構
-
-```yaml
-meta:
-  project_name: my-app
-  last_updated: 2026-04-16T15:30:00Z
-  last_agent: Claude Code
-  snapshot_version: 0.1.0
-
-architecture:
-  summary: Full-stack application
-  key_files:
-    - src/main.ts
-    - backend/api.py
-  tech_stack:
-    - React
-    - TypeScript
-    - FastAPI
-  dependencies:
-    react: ^18.0.0
-    # ...
-
-current_task:
-  goal: 實作使用者登入功能
-  status: 70% 完成
-  completed:
-    - 建立 User model
-    - 實作 JWT token
-  next_steps:
-    - 實作登入表單
-    - 整合 API
-  blockers:
-    - 等待設計稿確認
-
-decisions:
-  - decision: 使用 JWT 而非 Session
-    reason: 前後端分離
-    timestamp: 2026-04-16T14:00:00Z
-    impact: 需要管理 token 過期
-
-git_state:
-  branch: feature/auth
-  uncommitted_files:
-    - src/Login.tsx
-    - backend/auth.py
-  recent_commits:
-    - hash: abc123
-      message: Add JWT generation
-
-context:
-  important_notes:
-    - User table 有 email unique constraint
-  potential_issues:
-    - CORS 可能需要調整
-  related_docs:
-    - https://docs.project.com/auth
-```
-
-## 優勢
-
-### vs. 轉移完整對話（如 `continues`）
-
-| 特性 | save-my-session | 完整對話轉移 |
-|------|----------------|-------------|
-| Token 使用 | ✅ 數百 tokens | ❌ 數千 tokens |
-| 理解品質 | ✅ 結構化、精確 | ⚠️ 冗長、雜訊多 |
-| 可編輯性 | ✅ YAML 易編輯 | ❌ 對話格式難改 |
-| 版本控制 | ✅ 可 commit | ⚠️ 不適合 git |
-| 跨工具 | ✅ 通用格式 | ⚠️ 依賴工具格式 |
-
-### vs. 手動撰寫交接文件
-
-| 特性 | save-my-session | 手動文件 |
-|------|----------------|---------|
-| 速度 | ✅ 自動生成 | ❌ 耗時 |
-| Git 分析 | ✅ 自動 | ❌ 手動 |
-| 一致性 | ✅ 結構統一 | ⚠️ 因人而異 |
-| 維護 | ✅ 增量更新 | ❌ 容易過時 |
-
-## 進階使用
-
-### 手動編輯 project_state.yml
-
-你可以直接編輯 `project_state.yml` 來補充更多細節：
-
-```yaml
-current_task:
-  goal: 實作使用者登入功能
-  status: 70% 完成
-  completed:
-    - 建立 User model
-    - 實作 JWT token 生成
-    - 寫單元測試
-  next_steps:
-    - 實作前端登入表單 (使用 React Hook Form)
-    - 整合 API endpoint (/api/auth/login)
-    - 添加錯誤處理和驗證
-  blockers:
-    - 等待 UI/UX 團隊確認錯誤訊息文案
-```
-
-### Git Hooks 整合（未來功能）
-
-```bash
-# .git/hooks/pre-commit
-save-my-session snapshot
-```
-
-### CI/CD 整合（未來功能）
-
-在 PR 中自動生成專案狀態差異。
+## Session 檔案位置
+
+| Agent | 位置 |
+|---|---|
+| Claude Code | `~/.claude/projects/<path-with-dashes>/<uuid>.jsonl` |
+| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json`（slug mapping 在 `~/.gemini/projects.json`）|
+| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡） |
+
+轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記，`--list` 和後續的 transfer 會自動跳過，避免循環轉移。
 
 ## 技術架構
 
-- **語言**: TypeScript
-- **CLI**: Commander.js
-- **Git 分析**: simple-git
-- **YAML 處理**: yaml
-- **輸出美化**: chalk, ora
+- **語言**：TypeScript (ESM)
+- **CLI**：Commander.js
+- **測試**：Vitest
+- **核心流程**：三家各有 parser + writer，中間用 `UnifiedSession` 做轉換層
 
-## 專案狀態
+## 限制
 
-**Current Version**: 0.1.0 (MVP)
-
-**已完成功能：**
-- ✅ 自動專案分析（技術棧、檔案結構）
-- ✅ Git 狀態分析
-- ✅ Snapshot / Restore / Update 命令
-- ✅ CLI 介面
-
-**計劃功能：**
-- ⏳ AI 智能壓縮（自動判斷重要 context）
-- ⏳ Git hooks 整合
-- ⏳ 多 Agent 協作支援
-- ⏳ VS Code / JetBrains 插件
-- ⏳ 視覺化狀態面板
-
-## 貢獻
-
-歡迎提交 Issues 和 Pull Requests！
+- 只轉 user / assistant 的文字訊息。tool_use、thinking block 等會被跳過（各家格式差異太大，轉過去也跑不了）。
+- Agent 啟動時不會自動「載入最新 session」——使用者要自己打開 CLI 並在該專案目錄下執行，該 agent 才會把 session 列進歷史。
+- `--append` 用 timestamp 判斷去重，要求訊息都有正確的 ISO 8601 timestamp。
 
 ## 授權
 
 MIT
-
-## 相關專案
-
-- [continues](https://github.com/yigitkonur/cli-continues) - 跨工具 session 轉移
-- [agent-deck](https://github.com/asheshgoplani/agent-deck) - 多 agent session 管理
-- [crewAI](https://github.com/crewAIInc/crewAI) - Multi-agent 協作框架
-
----
-
-**讓 AI Agent 交接更流暢，專注在真正重要的 Context！**

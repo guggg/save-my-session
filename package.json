@@ -1,11 +1,16 @@
 {
   "name": "save-my-session",
   "version": "0.1.0",
-  "description": "Smart project state snapshot tool for seamless AI coding agent handoffs",
-  "main": "dist/index.js",
+  "description": "Transfer coding sessions between AI agents (Claude Code, Gemini CLI, Codex)",
+  "main": "dist/cli.js",
   "bin": {
     "save-my-session": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "dev": "ts-node src/cli.ts",
@@ -14,22 +19,18 @@
   "keywords": [
     "ai",
     "coding-agent",
-    "context",
     "session",
     "handoff",
-    "claude",
-    "cursor",
-    "copilot"
+    "claude-code",
+    "gemini-cli",
+    "codex"
   ],
   "author": "",
   "license": "MIT",
   "type": "module",
   "dependencies": {
     "chalk": "^5.3.0",
-    "commander": "^12.0.0",
-    "ora": "^8.0.0",
-    "simple-git": "^3.24.0",
-    "yaml": "^2.4.0"
+    "commander": "^12.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.7",

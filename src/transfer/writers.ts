@@ -255,7 +255,6 @@ export async function appendToSession(
   targetFilePath: string,
   targetAgent: AgentType
 ): Promise<{ appended: number }> {
-  // 1. Parse existing target session to find its last timestamp
   const { parseSession } = await import('./parsers.js');
   const existing = await parseSession(targetFilePath, targetAgent);
 
@@ -263,16 +262,16 @@ export async function appendToSession(
     ? existing.messages[existing.messages.length - 1].timestamp
     : '';
 
-  // 2. Filter source messages to only those after the last timestamp
-  const newMessages = lastTimestamp
-    ? sourceSession.messages.filter(m => m.timestamp > lastTimestamp)
-    : sourceSession.messages;
+  const lastDate = lastTimestamp ? new Date(lastTimestamp).getTime() : 0;
+  const newMessages = sourceSession.messages.filter(m => {
+    if (!m.timestamp) return false;
+    return new Date(m.timestamp).getTime() > lastDate;
+  });
 
   if (newMessages.length === 0) {
     return { appended: 0 };
   }
 
-  // 3. Append in the target's native format
   switch (targetAgent) {
     case 'claude':
       await appendToClaude(newMessages, targetFilePath, existing.id);
@@ -281,6 +280,7 @@ export async function appendToSession(
       await appendToGemini(newMessages, targetFilePath, sourceSession.model);
       break;
     case 'codex':
+      // Preserve the target session's cwd — that's the project it belongs to.
       await appendToCodex(newMessages, targetFilePath, existing.cwd, sourceSession.model);
       break;
   }
