@@ -94,6 +94,10 @@ export class TransferCommand {
 
     if (sessions.length === 0) {
       console.log('   No sessions found.\n');
+      console.log(chalk.gray(`   Searched project: ${cwd}`));
+      console.log(chalk.gray('   If that is not your project root, re-run from the correct directory'));
+      console.log(chalk.gray('   or pass --cwd <path> explicitly:'));
+      console.log(chalk.gray(`   save-my-session transfer --from ${agent} --list --cwd <project-root>\n`));
       return;
     }
 

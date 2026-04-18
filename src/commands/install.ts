@@ -4,6 +4,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,17 +22,17 @@ interface AgentConfig {
 const AGENTS: AgentConfig[] = [
   {
     name: 'Claude Code',
-    globalPath: path.join(process.env.HOME || '~', '.claude', 'CLAUDE.md'),
+    globalPath: path.join(os.homedir(), '.claude', 'CLAUDE.md'),
     promptFile: 'claude.md'
   },
   {
     name: 'Gemini CLI',
-    globalPath: path.join(process.env.HOME || '~', '.gemini', 'GEMINI.md'),
+    globalPath: path.join(os.homedir(), '.gemini', 'GEMINI.md'),
     promptFile: 'gemini.md'
   },
   {
     name: 'Codex',
-    globalPath: path.join(process.env.HOME || '~', '.codex', 'AGENTS.md'),
+    globalPath: path.join(os.homedir(), '.codex', 'AGENTS.md'),
     promptFile: 'codex.md'
   }
 ];

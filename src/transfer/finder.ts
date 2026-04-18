@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import { AgentType } from './types.js';
 import { TRANSFER_MARKER } from './writers.js';
 
@@ -26,7 +27,7 @@ export async function findAllSessions(projectCwd: string, agent: AgentType): Pro
 }
 
 async function findAllClaudeSessions(projectCwd: string): Promise<FoundSession[]> {
-  const homeDir = process.env.HOME || '~';
+  const homeDir = os.homedir();
   const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(homeDir, '.claude');
   const projectSlug = projectCwd.replace(/\//g, '-');
   const projectDir = path.join(configDir, 'projects', projectSlug);
@@ -47,7 +48,7 @@ async function findAllClaudeSessions(projectCwd: string): Promise<FoundSession[]
 }
 
 async function findAllGeminiSessions(projectCwd: string): Promise<FoundSession[]> {
-  const homeDir = process.env.HOME || '~';
+  const homeDir = os.homedir();
   const geminiHome = process.env.GEMINI_CLI_HOME || path.join(homeDir, '.gemini');
   const slug = await getGeminiSlug(geminiHome, projectCwd);
   if (!slug) return [];
@@ -69,7 +70,7 @@ async function findAllGeminiSessions(projectCwd: string): Promise<FoundSession[]
 }
 
 async function findAllCodexSessions(projectCwd: string): Promise<FoundSession[]> {
-  const homeDir = process.env.HOME || '~';
+  const homeDir = os.homedir();
   const codexHome = process.env.CODEX_HOME || path.join(homeDir, '.codex');
   const sessionsDir = path.join(codexHome, 'sessions');
 

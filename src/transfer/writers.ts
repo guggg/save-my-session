@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { UnifiedSession, AgentType } from './types.js';
 
@@ -8,7 +9,7 @@ export const TRANSFER_MARKER = '_transferred_by_save_my_session';
 // ─── Claude Writer ─────────────────────────────────────────────
 
 export async function writeClaudeSession(session: UnifiedSession, projectCwd: string): Promise<string> {
-  const homeDir = process.env.HOME || '~';
+  const homeDir = os.homedir();
   const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(homeDir, '.claude');
 
   // Claude uses path-with-dashes as project folder name
@@ -77,7 +78,7 @@ export async function writeClaudeSession(session: UnifiedSession, projectCwd: st
 // ─── Gemini Writer ─────────────────────────────────────────────
 
 export async function writeGeminiSession(session: UnifiedSession, projectCwd: string): Promise<string> {
-  const homeDir = process.env.HOME || '~';
+  const homeDir = os.homedir();
   const geminiHome = process.env.GEMINI_CLI_HOME || path.join(homeDir, '.gemini');
 
   // Get or create project slug from projects.json
@@ -131,21 +132,26 @@ export async function writeGeminiSession(session: UnifiedSession, projectCwd: st
 async function getOrCreateGeminiSlug(geminiHome: string, projectCwd: string): Promise<string> {
   const projectsPath = path.join(geminiHome, 'projects.json');
 
-  let projects: Record<string, Record<string, string>> = { projects: {} };
+  let projects: { projects: Record<string, string> } = { projects: {} };
   try {
     const content = await fs.readFile(projectsPath, 'utf-8');
     projects = JSON.parse(content);
+    if (!projects.projects) projects.projects = {};
   } catch {
     // File doesn't exist
   }
 
-  // Check if already mapped
   if (projects.projects[projectCwd]) {
     return projects.projects[projectCwd];
   }
 
-  // Create new slug from directory name
-  const slug = path.basename(projectCwd).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const base = path.basename(projectCwd).toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  const existing = new Set(Object.values(projects.projects));
+  let slug = base;
+  let suffix = 1;
+  while (existing.has(slug)) {
+    slug = `${base}-${suffix++}`;
+  }
 
   projects.projects[projectCwd] = slug;
   await fs.writeFile(projectsPath, JSON.stringify(projects, null, 4), 'utf-8');
@@ -156,7 +162,7 @@ async function getOrCreateGeminiSlug(geminiHome: string, projectCwd: string): Pr
 // ─── Codex Writer ──────────────────────────────────────────────
 
 export async function writeCodexSession(session: UnifiedSession, projectCwd: string): Promise<string> {
-  const homeDir = process.env.HOME || '~';
+  const homeDir = os.homedir();
   const codexHome = process.env.CODEX_HOME || path.join(homeDir, '.codex');
 
   // Codex organizes by date: sessions/YYYY/MM/DD/
