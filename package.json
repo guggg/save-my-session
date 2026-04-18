@@ -1,0 +1,39 @@
+{
+  "name": "save-my-session",
+  "version": "0.1.0",
+  "description": "Smart project state snapshot tool for seamless AI coding agent handoffs",
+  "main": "dist/index.js",
+  "bin": {
+    "save-my-session": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc && cp -r src/prompts dist/prompts",
+    "dev": "ts-node src/cli.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ai",
+    "coding-agent",
+    "context",
+    "session",
+    "handoff",
+    "claude",
+    "cursor",
+    "copilot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "commander": "^12.0.0",
+    "yaml": "^2.4.0",
+    "chalk": "^5.3.0",
+    "ora": "^8.0.0",
+    "simple-git": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}
