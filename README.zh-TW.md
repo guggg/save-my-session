@@ -1,15 +1,17 @@
 # 🔄 save-my-session
 
+[![npm](https://img.shields.io/npm/v/save-my-session)](https://www.npmjs.com/package/save-my-session) [![GitHub](https://img.shields.io/github/stars/guggg/save-my-session)](https://github.com/guggg/save-my-session/)
+
 > 讓 AI Coding Agent 的 session 在 Claude Code、Gemini CLI、Codex 之間無縫轉移。
 
-[English](./README.md)
+[English](https://github.com/guggg/save-my-session/blob/main/README.md)
 
 當你手上有好幾個 AI Coding Agent 的訂閱（Claude Code、Gemini CLI、Codex），最痛的不是額度用完，而是**切換時整段 context 要重新來過**。`save-my-session` 把一個 agent 的 session 檔直接轉成另一家的原生格式。下一個 agent 打開就是完整的對話歷史，不用再手抄 briefing。
 
 > **⚠️ 支援平台**：目前僅支援 **macOS / Linux**。Windows 尚未支援（Claude Code session 目錄的 slug 轉換邏輯需重新實作才能適配 Windows 路徑）。
 
 <p align="center">
-  <img src="docs/demo.zh.svg" alt="save-my-session 交接示範" width="860">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo.zh.svg" alt="save-my-session 交接示範" width="860">
 </p>
 
 ## 功能
@@ -34,7 +36,7 @@ save-my-session install
 這會在 `~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md` 各注入一段指示（用 `<!-- save-my-session:start -->` 標記包起來，隨時可 `uninstall` 乾淨移除）。裝完後各 agent 會在 session 變長或遇到 rate limit 時主動提醒你可以交接。
 
 <p align="center">
-  <img src="docs/demo-install.zh.svg" alt="install 示範" width="820">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-install.zh.svg" alt="install 示範" width="820">
 </p>
 
 ## 用法
@@ -59,7 +61,7 @@ save-my-session transfer --from claude --list
 ```
 
 <p align="center">
-  <img src="docs/demo-list.zh.svg" alt="--list 示範" width="760">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-list.zh.svg" alt="--list 示範" width="760">
 </p>
 
 ### 轉移 session
@@ -98,7 +100,7 @@ save-my-session transfer --from gemini --to claude --append <原本的 claude se
 只有 timestamp 比目標 session 最後一則**還新**的訊息會被 append 進去。重複執行也安全，第二次會回報 `appended: 0`。
 
 <p align="center">
-  <img src="docs/demo-append.zh.svg" alt="--append 示範" width="860">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.zh.svg" alt="--append 示範" width="860">
 </p>
 
 ### 移除注入的指示

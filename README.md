@@ -1,15 +1,17 @@
 # 🔄 save-my-session
 
+[![npm](https://img.shields.io/npm/v/save-my-session)](https://www.npmjs.com/package/save-my-session) [![GitHub](https://img.shields.io/github/stars/guggg/save-my-session)](https://github.com/guggg/save-my-session/)
+
 > Transfer coding sessions between AI agents — Claude Code, Gemini CLI, and Codex.
 
-[繁體中文](./README.zh-TW.md)
+[繁體中文](https://github.com/guggg/save-my-session/blob/main/README.zh-TW.md)
 
 When you juggle multiple AI coding agents (Claude Code, Gemini CLI, Codex), the painful part isn't running out of quota — it's **rebuilding context from scratch every time you switch**. `save-my-session` converts your session file in one agent directly into another agent's native format. The next agent opens the file, sees the full conversation history, and keeps going. No briefing required.
 
 > **⚠️ Platform support**: macOS / Linux only. Windows is not supported yet (the Claude Code project-slug algorithm needs a Windows-path-aware rewrite).
 
 <p align="center">
-  <img src="docs/demo.svg" alt="save-my-session handoff demo" width="860">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo.svg" alt="save-my-session handoff demo" width="860">
 </p>
 
 ## Features
@@ -34,7 +36,7 @@ save-my-session install
 This appends a block into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md` (wrapped in `<!-- save-my-session:start -->` markers so you can `uninstall` cleanly). Each agent will now proactively offer a handoff when it notices rate-limit warnings or an unusually long session.
 
 <p align="center">
-  <img src="docs/demo-install.svg" alt="install demo" width="820">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-install.svg" alt="install demo" width="820">
 </p>
 
 ## Usage
@@ -59,7 +61,7 @@ save-my-session transfer --from claude --list
 ```
 
 <p align="center">
-  <img src="docs/demo-list.svg" alt="--list demo" width="760">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-list.svg" alt="--list demo" width="760">
 </p>
 
 ### Transfer a session
@@ -98,7 +100,7 @@ save-my-session transfer --from gemini --to claude --append <path/to/original-cl
 Only messages whose timestamps are **strictly newer** than the target session's last message are appended. Safe to rerun — a second invocation appends 0.
 
 <p align="center">
-  <img src="docs/demo-append.svg" alt="--append demo" width="860">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.svg" alt="--append demo" width="860">
 </p>
 
 ### Remove the injected prompts
