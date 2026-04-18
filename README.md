@@ -2,34 +2,46 @@
 
 > Transfer coding sessions between AI agents — Claude Code, Gemini CLI, and Codex.
 
-當你手上有好幾個 AI Coding Agent 的訂閱（Claude Code、Gemini CLI、Codex），最痛的不是額度用完，而是**切換時整段 context 要重新來過**。`save-my-session` 把你在一個 agent 的 session 檔直接轉成另一家的原生格式，下個 agent 打開就是完整的對話歷史，不用再手抄 briefing。
+[繁體中文](./README.zh-TW.md)
 
-## 功能
+When you juggle multiple AI coding agents (Claude Code, Gemini CLI, Codex), the painful part isn't running out of quota — it's **rebuilding context from scratch every time you switch**. `save-my-session` converts your session file in one agent directly into another agent's native format. The next agent opens the file, sees the full conversation history, and keeps going. No briefing required.
 
-- **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
-- **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md`），讓 agent 自己偵測額度、主動建議交接。
-- **`--append`**：把另一個 agent 做過的新進度（時間戳比目標 session 最後一則還新的訊息）回寫到原本的 session，方便來回切換。
-- **`--list`**：列出目前專案所有 session，附帶最後一句 user 訊息、訊息數、時間區間。
+> **⚠️ Platform support**: macOS / Linux only. Windows is not supported yet (the Claude Code project-slug algorithm needs a Windows-path-aware rewrite).
 
-## 安裝
+<p align="center">
+  <img src="docs/demo.svg" alt="save-my-session handoff demo" width="860">
+</p>
+
+## Features
+
+- **`transfer`** — convert a Claude / Gemini / Codex session file into another agent's native format, written straight into the target agent's session directory.
+- **`install`** — inject a handoff prompt into each agent's global system prompt (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md`) so each agent can monitor quota and suggest a handoff on its own.
+- **`--append`** — merge only the newer messages (by timestamp) from another agent back into your original session, ideal for round-trip handoffs.
+- **`--list`** — list all sessions for the current project with last user message, counts, and time range.
+
+## Install
 
 ```bash
 npm install -g save-my-session
 ```
 
-安裝完可選擇執行：
+Then (optional):
 
 ```bash
 save-my-session install
 ```
 
-這會在 `~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md` 裡各注入一段指示（用 `<!-- save-my-session:start -->` 標記包起來，隨時可 `uninstall` 移除）。裝完後各 agent 會在 session 變長或遇到 rate limit 時主動提醒使用者可以交接。
+This appends a block into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md` (wrapped in `<!-- save-my-session:start -->` markers so you can `uninstall` cleanly). Each agent will now proactively offer a handoff when it notices rate-limit warnings or an unusually long session.
 
-## 用法
+<p align="center">
+  <img src="docs/demo-install.svg" alt="install demo" width="820">
+</p>
 
-> 所有指令都以 `cwd` 當作專案識別，**請在專案根目錄執行**，或用 `--cwd <path>` 指定。
+## Usage
 
-### 列出當前專案的 session
+> All commands use `cwd` to identify the project. **Run them from your project root**, or pass `--cwd <path>` explicitly.
+
+### List sessions for the current project
 
 ```bash
 save-my-session transfer --from claude --list
@@ -39,77 +51,85 @@ save-my-session transfer --from claude --list
 📋 Claude Code sessions for: /path/to/project
 
   #1 (latest)
-     "好，開始做 ABC"
-     58 user / 155 assistant messages
-     4/16 10:51 → 4/18 10:24
+     "fix append dedup bug and refactor writers"
+     42 user / 118 assistant messages
+     4/18 10:24 → 4/18 14:52
      /Users/you/.claude/projects/-path-to-project/<uuid>.jsonl
   ...
 ```
 
-### 轉移 session
+<p align="center">
+  <img src="docs/demo-list.svg" alt="--list demo" width="760">
+</p>
 
-最新的 Claude session → Gemini：
+### Transfer a session
+
+Latest Claude session → Gemini:
 
 ```bash
 save-my-session transfer --from claude --to gemini
 ```
 
-指定某個 session 檔：
+Specify a session file:
 
 ```bash
 save-my-session transfer --from gemini --to codex --session <path>
 ```
 
-### 轉移完後怎麼繼續對話
+### Picking up the transferred session
 
-轉移寫入的是目標 Agent 的原生 session 檔，但**對方 CLI 不會自動載入最新 session**。標準流程：
+The transfer writes a native session file into the target agent's directory, but **the target CLI does not auto-load the newest session on start**. The standard flow is:
 
-1. 跑 `save-my-session transfer ...`
-2. 打開目標 CLI（`claude`、`gemini` 或 `codex`）
-3. 在 CLI 裡用 `/resume`（或該 Agent 的歷史 session 選單）挑剛轉過去的那個 session
-4. 選中後就可以接著前一個 Agent 的進度繼續
+1. Run `save-my-session transfer ...`
+2. Open the target CLI (`claude`, `gemini`, or `codex`)
+3. Inside the CLI, run `/resume` (or the equivalent history picker) and pick the freshly written session
+4. You're now continuing from where the previous agent left off
 
-> 👉 如果目標 Agent 的 CLI 原本就開著，要**關掉重開**才會掃到新寫入的 session 檔。
+> 👉 If the target CLI is already running, **close and reopen** so it rescans the session directory.
 
-### 跨來回交接：把新進度 append 回原本的 session
+### Round-trip: append new progress back into the original session
 
-情境：Claude 做了一段 → transfer 到 Gemini 繼續做 → 想回 Claude 時，不想開新 session，想接回原本那個：
+Scenario: you started in Claude → transferred to Gemini → did more work there → want to continue in the **original** Claude session rather than a brand-new one:
 
 ```bash
-save-my-session transfer --from gemini --to claude --append <原本的 claude session 路徑>
+save-my-session transfer --from gemini --to claude --append <path/to/original-claude-session.jsonl>
 ```
 
-只有 timestamp 比 target 最後一則訊息**還新**的訊息會被 append 進去。
+Only messages whose timestamps are **strictly newer** than the target session's last message are appended. Safe to rerun — a second invocation appends 0.
 
-### 移除注入的指示
+<p align="center">
+  <img src="docs/demo-append.svg" alt="--append demo" width="860">
+</p>
+
+### Remove the injected prompts
 
 ```bash
 save-my-session uninstall
 ```
 
-## Session 檔案位置
+## Where each agent stores sessions
 
-| Agent | 位置 |
+| Agent | Location |
 |---|---|
 | Claude Code | `~/.claude/projects/<path-with-dashes>/<uuid>.jsonl` |
-| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json`（slug mapping 在 `~/.gemini/projects.json`）|
-| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡） |
+| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json` (slug mapping in `~/.gemini/projects.json`) |
+| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (`cwd` is inside `session_meta`) |
 
-轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記，`--list` 和後續的 transfer 會自動跳過，避免循環轉移。
+Transferred files carry a `_transferred_by_save_my_session` marker; `--list` and subsequent transfers skip them to avoid circular copies.
 
-## 技術架構
+## Architecture
 
-- **語言**：TypeScript (ESM)
-- **CLI**：Commander.js
-- **測試**：Vitest
-- **核心流程**：三家各有 parser + writer，中間用 `UnifiedSession` 做轉換層
+- TypeScript (ESM)
+- CLI via Commander.js
+- Vitest for unit tests
+- Each agent has its own parser + writer; the middle layer is a `UnifiedSession` object.
 
-## 限制
+## Limits
 
-- 只轉 user / assistant 的文字訊息。tool_use、thinking block 等會被跳過（各家格式差異太大，轉過去也跑不了）。
-- Agent 啟動時不會自動「載入最新 session」——使用者要自己打開 CLI 並在該專案目錄下執行，該 agent 才會把 session 列進歷史。
-- `--append` 用 timestamp 判斷去重，要求訊息都有正確的 ISO 8601 timestamp。
+- Only `user` and `assistant` text messages are transferred. `tool_use`, thinking blocks, and similar are skipped (the formats differ too much across agents for lossless conversion).
+- Agents do not auto-load the newest session on startup — always use `/resume` (or the history picker) to pick the transferred file.
+- `--append` dedup relies on ISO 8601 timestamps being correct on both sides.
 
-## 授權
+## License
 
 MIT
