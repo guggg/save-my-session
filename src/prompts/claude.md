@@ -20,7 +20,12 @@
   save-my-session transfer --from claude --to codex
   ```
 
-執行完之後，使用者直接打開對應的 CLI（`gemini` 或 `codex`），該 Agent 就會看到完整的歷史對話。
+執行完之後，告訴使用者：
+1. 打開對應的 CLI（`gemini` 或 `codex`）
+2. 在裡面用 `/resume`（或該 Agent 的歷史 session 選單）挑選剛轉過去的 session
+3. 選中後即可繼續對話，完整歷史都在
+
+（預設使用流程就是 **transfer → 開 CLI → `/resume` 挑 session**，不是直接打開 CLI 就會自動載入。）
 
 ### 常用輔助指令（提供給使用者參考）
 

@@ -60,6 +60,17 @@ save-my-session transfer --from claude --to gemini
 save-my-session transfer --from gemini --to codex --session <path>
 ```
 
+### 轉移完後怎麼繼續對話
+
+轉移寫入的是目標 Agent 的原生 session 檔，但**對方 CLI 不會自動載入最新 session**。標準流程：
+
+1. 跑 `save-my-session transfer ...`
+2. 打開目標 CLI（`claude`、`gemini` 或 `codex`）
+3. 在 CLI 裡用 `/resume`（或該 Agent 的歷史 session 選單）挑剛轉過去的那個 session
+4. 選中後就可以接著前一個 Agent 的進度繼續
+
+> 👉 如果目標 Agent 的 CLI 原本就開著，要**關掉重開**才會掃到新寫入的 session 檔。
+
 ### 跨來回交接：把新進度 append 回原本的 session
 
 情境：Claude 做了一段 → transfer 到 Gemini 繼續做 → 想回 Claude 時，不想開新 session，想接回原本那個：
