@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "dev": "ts-node src/cli.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [
     "ai",
@@ -25,15 +25,16 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
-    "commander": "^12.0.0",
-    "yaml": "^2.4.0",
     "chalk": "^5.3.0",
+    "commander": "^12.0.0",
     "ora": "^8.0.0",
-    "simple-git": "^3.24.0"
+    "simple-git": "^3.24.0",
+    "yaml": "^2.4.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.7",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.4"
   }
 }

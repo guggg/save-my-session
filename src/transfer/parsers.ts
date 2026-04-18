@@ -6,7 +6,7 @@ import { UnifiedSession, UnifiedMessage, AgentType } from './types.js';
 
 export async function parseClaudeSession(filePath: string): Promise<UnifiedSession> {
   const content = await fs.readFile(filePath, 'utf-8');
-  const lines = content.trim().split('\n').map(l => JSON.parse(l));
+  const lines = content.trim().split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
 
   const messages: UnifiedMessage[] = [];
   let sessionId = '';
@@ -141,7 +141,7 @@ function extractGeminiModel(data: any): string {
 
 export async function parseCodexSession(filePath: string): Promise<UnifiedSession> {
   const content = await fs.readFile(filePath, 'utf-8');
-  const lines = content.trim().split('\n').map(l => JSON.parse(l));
+  const lines = content.trim().split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
 
   const messages: UnifiedMessage[] = [];
   let sessionId = '';
