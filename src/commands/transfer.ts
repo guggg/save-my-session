@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import path from 'path';
-import { AgentType, findLatestSession, findAllSessions, parseSession, writeSession, appendToSession, FoundSession } from '../transfer/index.js';
+import { AgentType, findLatestSession, findAllSessions, resolveSessionPath, parseSession, writeSession, appendToSession, FoundSession } from '../transfer/index.js';
 
 export interface TransferOptions {
   from: AgentType;
@@ -9,6 +9,7 @@ export interface TransferOptions {
   sessionFile?: string;
   list?: boolean;
   append?: string; // path to target session to append into
+  force?: boolean; // skip timestamp filter when appending
 }
 
 const AGENT_LABELS: Record<AgentType, string> = {
@@ -36,9 +37,12 @@ export class TransferCommand {
     console.log(`   Project: ${cwd}\n`);
 
     // 1. Find session
-    let sessionPath = options.sessionFile;
+    let sessionPath: string;
 
-    if (!sessionPath) {
+    if (options.sessionFile) {
+      sessionPath = await resolveSessionPath(options.sessionFile, from, cwd);
+      console.log(`   Session: ${sessionPath}`);
+    } else {
       console.log(`🔍 Finding latest ${AGENT_LABELS[from]} session...`);
       const found = await findLatestSession(cwd, from);
 
@@ -47,8 +51,13 @@ export class TransferCommand {
       }
 
       sessionPath = found.filePath;
-      console.log(`   Found: ${sessionPath}`);
+      console.log(`   Found: ${chalk.bold(found.hash)}  ${found.filePath}`);
       console.log(`   Last modified: ${found.lastModified.toLocaleString()}\n`);
+    }
+
+    // Resolve --append target (may also be a hash)
+    if (options.append) {
+      options.append = await resolveSessionPath(options.append, to, cwd);
     }
 
     // 2. Parse session
@@ -67,7 +76,7 @@ export class TransferCommand {
     // 3. Write or append
     if (options.append) {
       console.log(`📎 Appending to existing ${AGENT_LABELS[to]} session...`);
-      const { appended } = await appendToSession(session, options.append, to);
+      const { appended } = await appendToSession(session, options.append, to, options.force);
 
       if (appended === 0) {
         console.log('   No new messages to append (all messages are older than the target session).\n');
@@ -101,26 +110,54 @@ export class TransferCommand {
       return;
     }
 
+    const W = 72;
+    const hr = '─'.repeat(W);
+
+    // Returns the display width of a string, counting CJK chars as 2 columns.
+    const displayWidth = (s: string) => [...s].reduce((n, c) => {
+      const cp = c.codePointAt(0) ?? 0;
+      const wide = (cp >= 0x1100 && cp <= 0xFFEF) || (cp >= 0x20000 && cp <= 0x2FA1F);
+      return n + (wide ? 2 : 1);
+    }, 0);
+
+    const pad = (s: string, width: number) => s + ' '.repeat(Math.max(0, width - displayWidth(s)));
+
     for (let i = 0; i < sessions.length; i++) {
       const s = sessions[i];
-      const tag = i === 0 ? chalk.green(' (latest)') : '';
+      const isLatest = i === 0;
       const preview = await this.getSessionPreview(s, agent);
 
-      console.log(`  ${chalk.bold(`#${i + 1}`)}${tag}`);
+      const labelText = isLatest ? `#${i + 1} ★ latest` : `#${i + 1}`;
+      const labelColored = isLatest ? chalk.bold.green(labelText) : chalk.bold(labelText);
+      const hashTag = chalk.yellow(s.hash);
+
+      console.log(chalk.gray(`  ┌${hr}┐`));
+      // label on left, hash on right
+      const rightPad = W - 1 - displayWidth(labelText) - 7 - 2; // 7 = hash len, 2 = spaces
+      console.log(`  │ ${labelColored}${' '.repeat(Math.max(1, rightPad))}${hashTag} │`);
+      console.log(chalk.gray(`  ├${hr}┤`));
+
       if (preview.lastUserMessage) {
-        const truncated = preview.lastUserMessage.length > 60
-          ? preview.lastUserMessage.slice(0, 60) + '...'
-          : preview.lastUserMessage;
-        console.log(`     "${truncated}"`);
+        const inner = W - 5; // "💬 " prefix (emoji=2, space=1) + trailing space
+        let truncated = preview.lastUserMessage;
+        while (displayWidth(truncated) > inner) {
+          truncated = [...truncated].slice(0, -1).join('');
+        }
+        if (truncated !== preview.lastUserMessage) truncated += '…';
+        console.log(`  │ 💬 ${pad(truncated, inner)} │`);
       }
-      console.log(`     ${preview.userCount} user / ${preview.assistantCount} assistant messages`);
-      console.log(`     ${preview.startTime} → ${preview.endTime}`);
-      console.log(`     ${chalk.gray(s.filePath)}`);
+
+      const msgLine = `💌 ${preview.userCount} user / ${preview.assistantCount} assistant`;
+      const timeLine = `🕐 ${preview.startTime} → ${preview.endTime}`;
+      console.log(`  │ ${pad(msgLine, W - 2)} │`);
+      console.log(`  │ ${pad(timeLine, W - 2)} │`);
+
+      console.log(chalk.gray(`  └${hr}┘`));
       console.log('');
     }
 
-    console.log(chalk.gray('  Use --session <path> to transfer a specific session:'));
-    console.log(chalk.gray(`  save-my-session transfer --from ${agent} --to <target> --session <path>\n`));
+    console.log(chalk.gray('  Use --session <hash> to transfer a specific session:'));
+    console.log(chalk.gray(`  save-my-session transfer --from ${agent} --to <target> --session <hash>\n`));
   }
 
   private async getSessionPreview(s: FoundSession, agent: AgentType): Promise<{

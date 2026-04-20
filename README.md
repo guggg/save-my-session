@@ -18,7 +18,7 @@ When you juggle multiple AI coding agents (Claude Code, Gemini CLI, Codex), the 
 
 - **`transfer`** — convert a Claude / Gemini / Codex session file into another agent's native format, written straight into the target agent's session directory.
 - **`install`** — inject a handoff prompt into each agent's global system prompt (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md`) so each agent can monitor quota and suggest a handoff on its own.
-- **`--append`** — merge only the newer messages (by timestamp) from another agent back into your original session, ideal for round-trip handoffs.
+- **`--append`** — merge messages from another agent back into your original session, ideal for round-trip handoffs. Dedup is by content (role + text), so rerunning is safe.
 - **`--list`** — list all sessions for the current project with last user message, counts, and time range.
 
 ## Install
@@ -97,7 +97,7 @@ Scenario: you started in Claude → transferred to Gemini → did more work ther
 save-my-session transfer --from gemini --to claude --append <path/to/original-claude-session.jsonl>
 ```
 
-Only messages whose timestamps are **strictly newer** than the target session's last message are appended. Safe to rerun — a second invocation appends 0.
+Messages are deduped by content (role + text) against the target, so it is safe to rerun — a second invocation appends 0. Add `--force` to bypass dedup and append every source message verbatim.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.svg" alt="--append demo" width="860">
@@ -117,7 +117,7 @@ save-my-session uninstall
 | Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json` (slug mapping in `~/.gemini/projects.json`) |
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (`cwd` is inside `session_meta`) |
 
-Transferred files carry a `_transferred_by_save_my_session` marker; `--list` and subsequent transfers skip them to avoid circular copies.
+Transferred files carry a `_transferred_by_save_my_session` marker. `--list` skips a transferred session only if it has not been touched since the transfer — if you kept chatting in it, it shows up as a normal source again.
 
 ## Architecture
 
@@ -130,7 +130,7 @@ Transferred files carry a `_transferred_by_save_my_session` marker; `--list` and
 
 - Only `user` and `assistant` text messages are transferred. `tool_use`, thinking blocks, and similar are skipped (the formats differ too much across agents for lossless conversion).
 - Agents do not auto-load the newest session on startup — always use `/resume` (or the history picker) to pick the transferred file.
-- `--append` dedup relies on ISO 8601 timestamps being correct on both sides.
+- `--append` dedup compares message content exactly (after trimming whitespace). Messages that were edited between transfers will appear as new.
 
 ## License
 

@@ -16,6 +16,9 @@ afterAll(async () => {
   await fs.rm(tmpDir, { recursive: true });
 });
 
+// Source contains a message that duplicates one already in the target
+// ("first question" / "first answer") plus two brand-new messages.
+// Dedup-by-content should keep only the new ones.
 function makeSourceSession(startHour: number): UnifiedSession {
   return {
     id: 'source',
@@ -25,8 +28,8 @@ function makeSourceSession(startHour: number): UnifiedSession {
     lastUpdated: `2026-04-16T${startHour + 1}:00:00Z`,
     model: 'gemini-3',
     messages: [
-      { role: 'user', text: 'old question', timestamp: `2026-04-16T${startHour}:00:00Z` },
-      { role: 'assistant', text: 'old answer', timestamp: `2026-04-16T${startHour}:00:05Z` },
+      { role: 'user', text: 'first question', timestamp: `2026-04-16T${startHour}:00:00Z` },
+      { role: 'assistant', text: 'first answer', timestamp: `2026-04-16T${startHour}:00:05Z` },
       { role: 'user', text: 'new question', timestamp: `2026-04-16T${startHour + 1}:00:00Z` },
       { role: 'assistant', text: 'new answer', timestamp: `2026-04-16T${startHour + 1}:00:05Z` },
     ]
@@ -57,22 +60,39 @@ describe('appendToSession - Claude', () => {
 
     const { appended } = await appendToSession(source, filePath, 'claude');
 
-    // Only 11:00:05 should be appended (11:00:00 is not > 11:00:00)
-    expect(appended).toBe(1);
+    // Source duplicates "first question" & "first answer" that already exist
+    // in the target, so only "new question" + "new answer" should append.
+    expect(appended).toBe(2);
 
     const parsed = await parseClaudeSession(filePath);
-    expect(parsed.messages).toHaveLength(3);
-    expect(parsed.messages[2].text).toBe('new answer');
+    expect(parsed.messages).toHaveLength(4);
+    expect(parsed.messages[2].text).toBe('new question');
+    expect(parsed.messages[3].text).toBe('new answer');
   });
 
-  it('returns 0 when source is older', async () => {
+  it('returns 0 when every source message already exists in target', async () => {
     const filePath = path.join(tmpDir, 'claude-noappend.jsonl');
     const lines = [
       JSON.stringify({ type: 'permission-mode', permissionMode: 'default', sessionId: 'target-2' }),
       JSON.stringify({
+        type: 'user', isMeta: false,
+        message: { role: 'user', content: 'first question' },
+        timestamp: '2026-04-16T10:00:00Z', sessionId: 'target-2'
+      }),
+      JSON.stringify({
         type: 'assistant',
-        message: { role: 'assistant', content: [{ type: 'text', text: 'late answer' }] },
-        timestamp: '2026-04-16T23:00:00Z', sessionId: 'target-2'
+        message: { role: 'assistant', content: [{ type: 'text', text: 'first answer' }] },
+        timestamp: '2026-04-16T10:00:05Z', sessionId: 'target-2'
+      }),
+      JSON.stringify({
+        type: 'user', isMeta: false,
+        message: { role: 'user', content: 'new question' },
+        timestamp: '2026-04-16T11:00:00Z', sessionId: 'target-2'
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'new answer' }] },
+        timestamp: '2026-04-16T11:00:05Z', sessionId: 'target-2'
       }),
     ];
     await fs.writeFile(filePath, lines.join('\n') + '\n');
@@ -80,6 +100,24 @@ describe('appendToSession - Claude', () => {
     const source = makeSourceSession(10);
     const { appended } = await appendToSession(source, filePath, 'claude');
     expect(appended).toBe(0);
+  });
+
+  it('force=true bypasses dedup and appends every source message', async () => {
+    const filePath = path.join(tmpDir, 'claude-force.jsonl');
+    const lines = [
+      JSON.stringify({ type: 'permission-mode', permissionMode: 'default', sessionId: 'target-3' }),
+      JSON.stringify({
+        type: 'user', isMeta: false,
+        message: { role: 'user', content: 'first question' },
+        timestamp: '2026-04-16T10:00:00Z', sessionId: 'target-3'
+      }),
+    ];
+    await fs.writeFile(filePath, lines.join('\n') + '\n');
+
+    const source = makeSourceSession(10);
+    const { appended } = await appendToSession(source, filePath, 'claude', true);
+
+    expect(appended).toBe(4);
   });
 });
 
@@ -91,8 +129,8 @@ describe('appendToSession - Gemini', () => {
       startTime: '2026-04-16T10:00:00Z',
       lastUpdated: '2026-04-16T11:00:00Z',
       messages: [
-        { id: 'm1', timestamp: '2026-04-16T10:00:00Z', type: 'user', content: [{ text: 'first' }] },
-        { id: 'm2', timestamp: '2026-04-16T11:00:00Z', type: 'gemini', content: 'first answer' },
+        { id: 'm1', timestamp: '2026-04-16T10:00:00Z', type: 'user', content: [{ text: 'first question' }] },
+        { id: 'm2', timestamp: '2026-04-16T10:00:05Z', type: 'gemini', content: 'first answer' },
       ]
     };
     await fs.writeFile(filePath, JSON.stringify(data));
@@ -100,11 +138,11 @@ describe('appendToSession - Gemini', () => {
     const source = makeSourceSession(10);
     const { appended } = await appendToSession(source, filePath, 'gemini');
 
-    expect(appended).toBe(1);
+    expect(appended).toBe(2);
 
     const parsed = await parseGeminiSession(filePath);
-    expect(parsed.messages).toHaveLength(3);
-    expect(parsed.messages[2].text).toBe('new answer');
+    expect(parsed.messages).toHaveLength(4);
+    expect(parsed.messages[3].text).toBe('new answer');
   });
 });
 
@@ -113,18 +151,18 @@ describe('appendToSession - Codex', () => {
     const filePath = path.join(tmpDir, 'codex-append.jsonl');
     const lines = [
       JSON.stringify({ timestamp: '2026-04-16T10:00:00Z', type: 'session_meta', payload: { id: 'cx-1', cwd: '/test' } }),
-      JSON.stringify({ timestamp: '2026-04-16T10:00:01Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'first' }] } }),
-      JSON.stringify({ timestamp: '2026-04-16T11:00:00Z', type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'first answer' }] } }),
+      JSON.stringify({ timestamp: '2026-04-16T10:00:01Z', type: 'response_item', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'first question' }] } }),
+      JSON.stringify({ timestamp: '2026-04-16T10:00:05Z', type: 'response_item', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'first answer' }] } }),
     ];
     await fs.writeFile(filePath, lines.join('\n') + '\n');
 
     const source = makeSourceSession(10);
     const { appended } = await appendToSession(source, filePath, 'codex');
 
-    expect(appended).toBe(1);
+    expect(appended).toBe(2);
 
     const parsed = await parseCodexSession(filePath);
-    expect(parsed.messages).toHaveLength(3);
-    expect(parsed.messages[2].text).toBe('new answer');
+    expect(parsed.messages).toHaveLength(4);
+    expect(parsed.messages[3].text).toBe('new answer');
   });
 });

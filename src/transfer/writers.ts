@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
-import { UnifiedSession, AgentType } from './types.js';
+import { UnifiedSession, AgentType, claudeProjectSlug } from './types.js';
 
 export const TRANSFER_MARKER = '_transferred_by_save_my_session';
 
@@ -12,8 +12,7 @@ export async function writeClaudeSession(session: UnifiedSession, projectCwd: st
   const homeDir = os.homedir();
   const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(homeDir, '.claude');
 
-  // Claude uses path-with-dashes as project folder name
-  const projectSlug = projectCwd.replace(/\//g, '-');
+  const projectSlug = claudeProjectSlug(projectCwd);
   const projectDir = path.join(configDir, 'projects', projectSlug);
   await fs.mkdir(projectDir, { recursive: true });
 
@@ -37,38 +36,33 @@ export async function writeClaudeSession(session: UnifiedSession, projectCwd: st
   }));
 
   // Convert messages
+  let prevUuid: string | null = null;
   for (const msg of session.messages) {
+    const uuid = crypto.randomUUID();
     if (msg.role === 'user') {
       lines.push(JSON.stringify({
-        parentUuid: null,
+        parentUuid: prevUuid,
         isSidechain: false,
         type: 'user',
-        message: {
-          role: 'user',
-          content: msg.text
-        },
-        uuid: crypto.randomUUID(),
+        message: { role: 'user', content: msg.text },
+        uuid,
         timestamp: msg.timestamp,
         userType: 'external',
         cwd: projectCwd,
         sessionId
       }));
-    }
-
-    if (msg.role === 'assistant') {
+    } else if (msg.role === 'assistant') {
       lines.push(JSON.stringify({
-        parentUuid: null,
+        parentUuid: prevUuid,
         isSidechain: false,
         type: 'assistant',
-        message: {
-          role: 'assistant',
-          content: [{ type: 'text', text: msg.text }]
-        },
-        uuid: crypto.randomUUID(),
+        message: { role: 'assistant', content: [{ type: 'text', text: msg.text }] },
+        uuid,
         timestamp: msg.timestamp,
         sessionId
       }));
     }
+    prevUuid = uuid;
   }
 
   await fs.writeFile(filePath, lines.join('\n') + '\n', 'utf-8');
@@ -253,20 +247,29 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
 export async function appendToSession(
   sourceSession: UnifiedSession,
   targetFilePath: string,
-  targetAgent: AgentType
+  targetAgent: AgentType,
+  force = false
 ): Promise<{ appended: number }> {
   const { parseSession } = await import('./parsers.js');
   const existing = await parseSession(targetFilePath, targetAgent);
 
-  const lastTimestamp = existing.messages.length > 0
-    ? existing.messages[existing.messages.length - 1].timestamp
-    : '';
+  // Dedup by content (role + text) instead of timestamp. Timestamps get
+  // rewritten on every transfer, so a message can ping-pong between agents
+  // and end up with a different timestamp than when it was first authored —
+  // a timestamp-only filter then fails in both directions (missing appends
+  // when the target looks newer, duplicate appends when it looks older).
+  const existingSignatures = new Set(
+    existing.messages.map(m => `${m.role}\u0000${m.text.trim()}`)
+  );
 
-  const lastDate = lastTimestamp ? new Date(lastTimestamp).getTime() : 0;
-  const newMessages = sourceSession.messages.filter(m => {
-    if (!m.timestamp) return false;
-    return new Date(m.timestamp).getTime() > lastDate;
-  });
+  const newMessages = force
+    ? sourceSession.messages
+    : sourceSession.messages.filter(m => {
+        const sig = `${m.role}\u0000${m.text.trim()}`;
+        if (existingSignatures.has(sig)) return false;
+        existingSignatures.add(sig);
+        return true;
+      });
 
   if (newMessages.length === 0) {
     return { appended: 0 };
@@ -293,32 +296,44 @@ async function appendToClaude(
   filePath: string,
   sessionId: string
 ): Promise<void> {
-  const lines: string[] = [];
+  // Find the uuid of the last message in the target file so we can chain
+  // parentUuid correctly — otherwise /resume won't show the appended messages.
+  const content = await fs.readFile(filePath, 'utf-8');
+  const existingLines = content.trim().split('\n').filter(Boolean);
+  let prevUuid: string | null = null;
+  for (let i = existingLines.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(existingLines[i]);
+      if (parsed.uuid) { prevUuid = parsed.uuid; break; }
+    } catch { continue; }
+  }
 
+  const lines: string[] = [];
   for (const msg of messages) {
+    const uuid = crypto.randomUUID();
     if (msg.role === 'user') {
       lines.push(JSON.stringify({
-        parentUuid: null,
+        parentUuid: prevUuid,
         isSidechain: false,
         type: 'user',
         message: { role: 'user', content: msg.text },
-        uuid: crypto.randomUUID(),
+        uuid,
         timestamp: msg.timestamp,
         userType: 'external',
         sessionId
       }));
-    }
-    if (msg.role === 'assistant') {
+    } else if (msg.role === 'assistant') {
       lines.push(JSON.stringify({
-        parentUuid: null,
+        parentUuid: prevUuid,
         isSidechain: false,
         type: 'assistant',
         message: { role: 'assistant', content: [{ type: 'text', text: msg.text }] },
-        uuid: crypto.randomUUID(),
+        uuid,
         timestamp: msg.timestamp,
         sessionId
       }));
     }
+    prevUuid = uuid;
   }
 
   await fs.appendFile(filePath, '\n' + lines.join('\n') + '\n', 'utf-8');

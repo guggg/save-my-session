@@ -1,13 +1,37 @@
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { AgentType } from './types.js';
+import crypto from 'crypto';
+import { AgentType, claudeProjectSlug } from './types.js';
 import { TRANSFER_MARKER } from './writers.js';
 
 export interface FoundSession {
   agent: AgentType;
   filePath: string;
+  hash: string;      // first 7 chars of sha1(filePath) — stable short ID
   lastModified: Date;
+}
+
+export function sessionHash(filePath: string): string {
+  return crypto.createHash('sha1').update(filePath).digest('hex').slice(0, 7);
+}
+
+/** Resolve a --session / --append value that may be a 7-char hash or a full path. */
+export async function resolveSessionPath(
+  hashOrPath: string,
+  agent: AgentType,
+  cwd: string
+): Promise<string> {
+  // Full path — use directly.
+  if (hashOrPath.includes('/') || hashOrPath.includes('\\')) return hashOrPath;
+
+  // Short hash — look it up in the session list.
+  const all = await findAllSessions(cwd, agent);
+  const match = all.find(s => s.hash === hashOrPath);
+  if (!match) {
+    throw new Error(`No session found with hash "${hashOrPath}". Run --list to see available sessions.`);
+  }
+  return match.filePath;
 }
 
 export async function findLatestSession(projectCwd: string, agent: AgentType): Promise<FoundSession | null> {
@@ -29,7 +53,7 @@ export async function findAllSessions(projectCwd: string, agent: AgentType): Pro
 async function findAllClaudeSessions(projectCwd: string): Promise<FoundSession[]> {
   const homeDir = os.homedir();
   const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(homeDir, '.claude');
-  const projectSlug = projectCwd.replace(/\//g, '-');
+  const projectSlug = claudeProjectSlug(projectCwd);
   const projectDir = path.join(configDir, 'projects', projectSlug);
 
   const results: FoundSession[] = [];
@@ -39,7 +63,7 @@ async function findAllClaudeSessions(projectCwd: string): Promise<FoundSession[]
       const filePath = path.join(projectDir, file);
       if (await isTransferredSession(filePath)) continue;
       const stat = await fs.stat(filePath);
-      results.push({ agent: 'claude', filePath, lastModified: stat.mtime });
+      results.push({ agent: 'claude', filePath, hash: sessionHash(filePath), lastModified: stat.mtime });
     }
   } catch {
     // directory doesn't exist
@@ -59,9 +83,12 @@ async function findAllGeminiSessions(projectCwd: string): Promise<FoundSession[]
     const entries = await fs.readdir(chatsDir);
     for (const file of entries.filter(f => f.endsWith('.json'))) {
       const filePath = path.join(chatsDir, file);
-      if (await isTransferredGeminiSession(filePath)) continue;
+      // Skip a transferred session only if nothing has happened in it since
+      // the transfer. If the user kept chatting in it, treat it as a real
+      // Gemini session.
+      if (await isUntouchedTransferredGeminiSession(filePath)) continue;
       const stat = await fs.stat(filePath);
-      results.push({ agent: 'gemini', filePath, lastModified: stat.mtime });
+      results.push({ agent: 'gemini', filePath, hash: sessionHash(filePath), lastModified: stat.mtime });
     }
   } catch {
     // directory doesn't exist
@@ -97,7 +124,7 @@ async function findAllCodexSessions(projectCwd: string): Promise<FoundSession[]>
               const meta = JSON.parse(metaLine);
               if (meta.type === 'session_meta' && meta.payload?.cwd === projectCwd) {
                 const stat = await fs.stat(filePath);
-                results.push({ agent: 'codex', filePath, lastModified: stat.mtime });
+                results.push({ agent: 'codex', filePath, hash: sessionHash(filePath), lastModified: stat.mtime });
               }
             } catch {
               continue;
@@ -137,11 +164,21 @@ async function isTransferredSession(filePath: string): Promise<boolean> {
   return lines.some(l => l.includes(TRANSFER_MARKER));
 }
 
-async function isTransferredGeminiSession(filePath: string): Promise<boolean> {
+async function isUntouchedTransferredGeminiSession(filePath: string): Promise<boolean> {
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     const data = JSON.parse(content);
-    return TRANSFER_MARKER in data;
+    if (!(TRANSFER_MARKER in data)) return false;
+
+    const transferredAt = data[TRANSFER_MARKER]?.transferred_at;
+    if (!transferredAt) return true; // marker exists but no timestamp — treat as untouched
+
+    const transferredMs = new Date(transferredAt).getTime();
+    const lastUpdatedMs = data.lastUpdated ? new Date(data.lastUpdated).getTime() : 0;
+
+    // If lastUpdated is newer than the transfer time, the user continued the
+    // conversation and this is a real Gemini session we should transfer from.
+    return lastUpdatedMs <= transferredMs;
   } catch {
     return false;
   }

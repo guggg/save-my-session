@@ -18,7 +18,7 @@
 
 - **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
 - **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md`），讓 agent 自己偵測額度、主動建議交接。
-- **`--append`**：把另一個 agent 做過的新進度（timestamp 比目標 session 最後一則還新的訊息）回寫到原本的 session，方便來回切換。
+- **`--append`**：把另一個 agent 做過的進度回寫到原本的 session，方便來回切換。用訊息內容（role + text）去重，重複執行也安全。
 - **`--list`**：列出目前專案所有 session，附帶最後一則使用者訊息、訊息數、時間區間。
 
 ## 安裝
@@ -97,7 +97,7 @@ save-my-session transfer --from gemini --to codex --session <path>
 save-my-session transfer --from gemini --to claude --append <原本的 claude session 路徑>
 ```
 
-只有 timestamp 比目標 session 最後一則**還新**的訊息會被 append 進去。重複執行也安全，第二次會回報 `appended: 0`。
+用訊息內容（role + text）和目標 session 去重，重複執行也安全，第二次會回報 `appended: 0`。若要略過去重、把來源所有訊息都塞進去，加 `--force`。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.zh.svg" alt="--append 示範" width="860">
@@ -117,7 +117,7 @@ save-my-session uninstall
 | Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json`（slug mapping 在 `~/.gemini/projects.json`）|
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡） |
 
-轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記，`--list` 和後續的 transfer 會自動跳過，避免循環轉移。
+轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記。`--list` 只會跳過「轉移後完全沒再動過」的檔案；如果你在 agent 裡繼續對話，這個 session 會被當成新的來源出現。
 
 ## 技術架構
 
@@ -130,7 +130,7 @@ save-my-session uninstall
 
 - 只轉 `user` / `assistant` 的文字訊息。`tool_use`、thinking block 等會被跳過（各家格式差異太大，轉過去也跑不了）。
 - Agent 啟動時不會自動「載入最新 session」——要自己用 `/resume`（或該 agent 的歷史選單）挑剛轉過去的那個 session。
-- `--append` 用 timestamp 判斷去重，要求訊息都有正確的 ISO 8601 timestamp。
+- `--append` 用訊息內容逐字比對（會 trim 掉前後空白）；如果兩邊訊息曾被編輯過，會被當成不同訊息。
 
 ## 授權
 

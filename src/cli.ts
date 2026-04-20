@@ -8,6 +8,7 @@
 import { Command } from 'commander';
 import { InstallCommand, UninstallCommand } from './commands/install.js';
 import { TransferCommand } from './commands/transfer.js';
+import { PeekCommand } from './commands/peek.js';
 import { AgentType } from './transfer/types.js';
 import chalk from 'chalk';
 
@@ -27,6 +28,7 @@ program
   .option('--session <file>', 'Specific session file to transfer')
   .option('--list', 'List all sessions for the source agent')
   .option('--append <file>', 'Append to an existing target session instead of creating new')
+  .option('--force', 'Skip timestamp filter when appending (include all messages)')
   .action(async (options) => {
     try {
       const validAgents = ['claude', 'gemini', 'codex'];
@@ -47,7 +49,34 @@ program
         cwd: options.cwd,
         sessionFile: options.session,
         list: options.list,
-        append: options.append
+        append: options.append,
+        force: options.force
+      });
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('peek')
+  .description('Preview the last N messages of a session')
+  .requiredOption('--from <agent>', 'Agent to peek (claude|gemini|codex)')
+  .option('--cwd <path>', 'Project directory', process.cwd())
+  .option('--session <file>', 'Specific session file to peek')
+  .option('--tail <n>', 'Number of messages to show', '20')
+  .action(async (options) => {
+    try {
+      const validAgents = ['claude', 'gemini', 'codex'];
+      if (!validAgents.includes(options.from)) {
+        throw new Error(`Invalid agent: ${options.from}. Use: ${validAgents.join(', ')}`);
+      }
+      const cmd = new PeekCommand();
+      await cmd.execute({
+        from: options.from as AgentType,
+        cwd: options.cwd,
+        sessionFile: options.session,
+        tail: parseInt(options.tail, 10)
       });
     } catch (error) {
       console.error(chalk.red('❌ Error:'), (error as Error).message);
@@ -102,7 +131,10 @@ program
     console.log(chalk.bold('5. Merge changes back into an existing session:'));
     console.log(chalk.gray('   $ save-my-session transfer --from gemini --to claude --append <target-session>\n'));
 
-    console.log(chalk.bold('6. Remove the handoff prompts:'));
+    console.log(chalk.bold('6. Force-append every message (bypass dedup):'));
+    console.log(chalk.gray('   $ save-my-session transfer --from gemini --to claude --append <target-session> --force\n'));
+
+    console.log(chalk.bold('7. Remove the handoff prompts:'));
     console.log(chalk.gray('   $ save-my-session uninstall\n'));
   });
 

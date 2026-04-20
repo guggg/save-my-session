@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { TRANSFER_MARKER } from '../transfer/writers.js';
 import { findLatestSession, findAllSessions } from '../transfer/finder.js';
+import { claudeProjectSlug } from '../transfer/types.js';
 
 let tmpDir: string;
 
@@ -25,7 +26,7 @@ describe('Claude finder', () => {
   const projectCwd = '/Users/test/myproject';
 
   beforeAll(async () => {
-    const slug = projectCwd.replace(/\//g, '-');
+    const slug = claudeProjectSlug(projectCwd);
     const projectDir = path.join(tmpDir, '.claude', 'projects', slug);
     await fs.mkdir(projectDir, { recursive: true });
 
@@ -64,6 +65,24 @@ describe('Claude finder', () => {
     const found = await findLatestSession('/no/such/project', 'claude');
     expect(found).toBeNull();
   });
+
+  it('finds sessions for paths with non-alphanumeric chars (e.g. &)', async () => {
+    const specialCwd = '/Users/test/ETL&GIS/sub';
+    const slug = claudeProjectSlug(specialCwd);
+    expect(slug).toBe('-Users-test-ETL-GIS-sub');
+
+    const projectDir = path.join(tmpDir, '.claude', 'projects', slug);
+    await fs.mkdir(projectDir, { recursive: true });
+    const lines = [
+      JSON.stringify({ type: 'permission-mode', sessionId: 'special-1' }),
+      JSON.stringify({ type: 'user', isMeta: false, message: { role: 'user', content: 'hi' }, timestamp: '2026-04-16T10:00:00Z', sessionId: 'special-1' }),
+    ];
+    await fs.writeFile(path.join(projectDir, 'special-1.jsonl'), lines.join('\n') + '\n');
+
+    const found = await findLatestSession(specialCwd, 'claude');
+    expect(found).not.toBeNull();
+    expect(found!.filePath).toContain('special-1.jsonl');
+  });
 });
 
 describe('Gemini finder', () => {
@@ -88,22 +107,44 @@ describe('Gemini finder', () => {
 
     await new Promise(r => setTimeout(r, 50));
 
-    // Transferred session (newer)
+    // Transferred session, untouched (lastUpdated == transferred_at)
     await fs.writeFile(
       path.join(chatsDir, 'session-transferred.json'),
-      JSON.stringify({ sessionId: 'g2', [TRANSFER_MARKER]: { source_agent: 'claude' }, messages: [] })
+      JSON.stringify({
+        sessionId: 'g2',
+        lastUpdated: '2026-04-16T11:00:00Z',
+        [TRANSFER_MARKER]: { source_agent: 'claude', transferred_at: '2026-04-16T11:00:00Z' },
+        messages: []
+      })
+    );
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Transferred session that the user continued chatting in
+    // (lastUpdated > transferred_at) — should be treated as a real session
+    await fs.writeFile(
+      path.join(chatsDir, 'session-continued.json'),
+      JSON.stringify({
+        sessionId: 'g3',
+        lastUpdated: '2026-04-16T13:00:00Z',
+        [TRANSFER_MARKER]: { source_agent: 'claude', transferred_at: '2026-04-16T11:00:00Z' },
+        messages: [
+          { id: 'x', timestamp: '2026-04-16T13:00:00Z', type: 'user', content: [{ text: 'continued' }] }
+        ]
+      })
     );
   });
 
-  it('skips transferred sessions', async () => {
-    const found = await findLatestSession(projectCwd, 'gemini');
-    expect(found).not.toBeNull();
-    expect(found!.filePath).toContain('session-native.json');
+  it('skips untouched transferred sessions but keeps continued ones', async () => {
+    const all = await findAllSessions(projectCwd, 'gemini');
+    const names = all.map(s => path.basename(s.filePath)).sort();
+    expect(names).toEqual(['session-continued.json', 'session-native.json']);
   });
 
-  it('findAllSessions excludes transferred', async () => {
-    const all = await findAllSessions(projectCwd, 'gemini');
-    expect(all).toHaveLength(1);
+  it('latest picks the most recent non-untouched session', async () => {
+    const found = await findLatestSession(projectCwd, 'gemini');
+    expect(found).not.toBeNull();
+    expect(found!.filePath).toContain('session-continued.json');
   });
 });
 

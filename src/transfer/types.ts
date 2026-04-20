@@ -15,3 +15,10 @@ export interface UnifiedSession {
   lastUpdated: string;
   model?: string;
 }
+
+// Claude Code slugs project directories by replacing every non-alphanumeric
+// char with a dash (confirmed by inspecting ~/.claude/projects/). Keep this in
+// one place so finder and writer always agree.
+export function claudeProjectSlug(cwd: string): string {
+  return cwd.replace(/[^a-zA-Z0-9]/g, '-');
+}
