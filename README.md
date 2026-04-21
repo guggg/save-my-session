@@ -19,7 +19,7 @@ When you juggle multiple AI coding agents (Claude Code, Gemini CLI, Codex), the 
 - **`transfer`** — convert a Claude / Gemini / Codex session file into another agent's native format, written straight into the target agent's session directory.
 - **`install`** — inject a handoff prompt into each agent's global system prompt (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md`) so each agent can monitor quota and suggest a handoff on its own.
 - **`--append`** — merge messages from another agent back into your original session, ideal for round-trip handoffs. Dedup is by content (role + text), so rerunning is safe.
-- **`--list`** — list all sessions for the current project with last user message, counts, and time range.
+- **`list`** — list all sessions for the current project with last user message, counts, and time range.
 
 ## Install
 
@@ -46,7 +46,7 @@ This appends a block into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.code
 ### List sessions for the current project
 
 ```bash
-save-my-session transfer --from claude --list
+save-my-session list --from claude
 ```
 
 ```
@@ -117,7 +117,7 @@ save-my-session uninstall
 | Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json` (slug mapping in `~/.gemini/projects.json`) |
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (`cwd` is inside `session_meta`) |
 
-Transferred files carry a `_transferred_by_save_my_session` marker. `--list` skips a transferred session only if it has not been touched since the transfer — if you kept chatting in it, it shows up as a normal source again.
+Transferred files carry a `_transferred_by_save_my_session` marker. `list` skips a transferred session only if it has not been touched since the transfer — if you kept chatting in it, it shows up as a normal source again.
 
 ## Architecture
 

@@ -19,7 +19,7 @@
 - **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
 - **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md`），讓 agent 自己偵測額度、主動建議交接。
 - **`--append`**：把另一個 agent 做過的進度回寫到原本的 session，方便來回切換。用訊息內容（role + text）去重，重複執行也安全。
-- **`--list`**：列出目前專案所有 session，附帶最後一則使用者訊息、訊息數、時間區間。
+- **`list`**：列出目前專案所有 session，附帶最後一則使用者訊息、訊息數、時間區間。
 
 ## 安裝
 
@@ -46,7 +46,7 @@ save-my-session install
 ### 列出當前專案的 session
 
 ```bash
-save-my-session transfer --from claude --list
+save-my-session list --from claude
 ```
 
 ```
@@ -117,7 +117,7 @@ save-my-session uninstall
 | Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json`（slug mapping 在 `~/.gemini/projects.json`）|
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡） |
 
-轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記。`--list` 只會跳過「轉移後完全沒再動過」的檔案；如果你在 agent 裡繼續對話，這個 session 會被當成新的來源出現。
+轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記。`list` 只會跳過「轉移後完全沒再動過」的檔案；如果你在 agent 裡繼續對話，這個 session 會被當成新的來源出現。
 
 ## 技術架構
 

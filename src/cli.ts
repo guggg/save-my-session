@@ -8,6 +8,7 @@
 import { Command } from 'commander';
 import { InstallCommand, UninstallCommand } from './commands/install.js';
 import { TransferCommand } from './commands/transfer.js';
+import { ListCommand } from './commands/list.js';
 import { PeekCommand } from './commands/peek.js';
 import { AgentType } from './transfer/types.js';
 import chalk from 'chalk';
@@ -51,6 +52,28 @@ program
         list: options.list,
         append: options.append,
         force: options.force
+      });
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('list')
+  .description('List all sessions for a given agent in this project')
+  .requiredOption('--from <agent>', 'Agent to list (claude|gemini|codex)')
+  .option('--cwd <path>', 'Project directory', process.cwd())
+  .action(async (options) => {
+    try {
+      const validAgents = ['claude', 'gemini', 'codex'];
+      if (!validAgents.includes(options.from)) {
+        throw new Error(`Invalid agent: ${options.from}. Use: ${validAgents.join(', ')}`);
+      }
+      const cmd = new ListCommand();
+      await cmd.execute({
+        from: options.from as AgentType,
+        cwd: options.cwd
       });
     } catch (error) {
       console.error(chalk.red('❌ Error:'), (error as Error).message);
@@ -120,7 +143,7 @@ program
     console.log(chalk.gray('   $ save-my-session install\n'));
 
     console.log(chalk.bold('2. List Claude sessions for the current project:'));
-    console.log(chalk.gray('   $ save-my-session transfer --from claude --list\n'));
+    console.log(chalk.gray('   $ save-my-session list --from claude\n'));
 
     console.log(chalk.bold('3. Transfer the latest Claude session to Gemini:'));
     console.log(chalk.gray('   $ save-my-session transfer --from claude --to gemini\n'));
