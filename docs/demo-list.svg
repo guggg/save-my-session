@@ -44,7 +44,7 @@
 
   <rect class="bg" width="760" height="520" rx="14"/>
   <text x="380" y="28" text-anchor="middle" fill="#cdd6f4" font-size="14" font-weight="600">
-    save-my-session · <tspan class="hl">--list</tspan> demo
+    save-my-session · <tspan class="hl">list</tspan> demo
   </text>
 
   <!-- lego stage -->
@@ -82,7 +82,7 @@
     <g transform="translate(16, 48)">
       <g opacity="0">
         <animate attributeName="opacity" values="0;1;1;1" keyTimes="0;0.04;0.98;1" dur="20s" repeatCount="indefinite"/>
-        <text y="14"><tspan class="prompt">$</tspan> <tspan class="cmd">save-my-session transfer --from claude --list</tspan></text>
+        <text y="14"><tspan class="prompt">$</tspan> <tspan class="cmd">save-my-session list --from claude</tspan></text>
       </g>
 
       <g opacity="0">

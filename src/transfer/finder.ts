@@ -29,7 +29,7 @@ export async function resolveSessionPath(
   const all = await findAllSessions(cwd, agent);
   const match = all.find(s => s.hash === hashOrPath);
   if (!match) {
-    throw new Error(`No session found with hash "${hashOrPath}". Run --list to see available sessions.`);
+    throw new Error(`No session found with hash "${hashOrPath}". Run \`save-my-session list --from <agent>\` to see available sessions.`);
   }
   return match.filePath;
 }

@@ -61,7 +61,7 @@ save-my-session list --from claude
 ```
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-list.svg" alt="--list demo" width="760">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-list.svg" alt="list demo" width="760">
 </p>
 
 ### Transfer a session
