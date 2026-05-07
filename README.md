@@ -94,7 +94,7 @@ The transfer writes a native session file into the target agent's directory, but
 Scenario: you started in Claude → transferred to Gemini → did more work there → want to continue in the **original** Claude session rather than a brand-new one:
 
 ```bash
-save-my-session transfer --from gemini --to claude --append <path/to/original-claude-session.jsonl>
+save-my-session transfer --from gemini --to claude --append <hash-or-path>
 ```
 
 Messages are deduped by content (role + text) against the target, so it is safe to rerun — a second invocation appends 0. Add `--force` to bypass dedup and append every source message verbatim.
@@ -117,7 +117,7 @@ npm uninstall -g save-my-session
 | Agent | Location |
 |---|---|
 | Claude Code | `~/.claude/projects/<path-with-dashes>/<uuid>.jsonl` |
-| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json` (slug mapping in `~/.gemini/projects.json`) |
+| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.jsonl` (slug from `~/.gemini/projects.json`; session metadata includes `projectHash = sha256(cwd)`) |
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (`cwd` is inside `session_meta`) |
 
 Transferred files carry a `_transferred_by_save_my_session` marker. `list` skips a transferred session only if it has not been touched since the transfer — if you kept chatting in it, it shows up as a normal source again.

@@ -94,7 +94,7 @@ save-my-session transfer --from gemini --to codex --session <path>
 情境：Claude 做了一段 → transfer 到 Gemini 繼續做 → 想回 Claude 時，不想開新 session，想接回原本那個：
 
 ```bash
-save-my-session transfer --from gemini --to claude --append <原本的 claude session 路徑>
+save-my-session transfer --from gemini --to claude --append <hash 或完整路徑>
 ```
 
 用訊息內容（role + text）和目標 session 去重，重複執行也安全，第二次會回報 `appended: 0`。若要略過去重、把來源所有訊息都塞進去，加 `--force`。
@@ -117,7 +117,7 @@ npm uninstall -g save-my-session
 | Agent | 位置 |
 |---|---|
 | Claude Code | `~/.claude/projects/<path-with-dashes>/<uuid>.jsonl` |
-| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.json`（slug mapping 在 `~/.gemini/projects.json`）|
+| Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.jsonl`（slug 來自 `~/.gemini/projects.json`；session metadata 含 `projectHash = sha256(cwd)`）|
 | Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡） |
 
 轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記。`list` 只會跳過「轉移後完全沒再動過」的檔案；如果你在 agent 裡繼續對話，這個 session 會被當成新的來源出現。
