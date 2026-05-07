@@ -7,6 +7,22 @@ import { UnifiedSession, AgentType, claudeProjectSlug } from './types.js';
 
 export const TRANSFER_MARKER = '_transferred_by_save_my_session';
 
+const AGENT_LABELS: Record<string, string> = {
+  claude: 'Claude Code',
+  gemini: 'Gemini CLI',
+  codex: 'Codex'
+};
+
+function handoffNotice(sourceAgent: string, startTime: string): { text: string; timestamp: string } {
+  const label = AGENT_LABELS[sourceAgent] || sourceAgent;
+  const text = `[This conversation was transferred from ${label} using save-my-session. The history below is from the previous session — just pick up naturally from where things left off.]`;
+  // Place the notice 1ms before the first message so it sorts first.
+  const ts = startTime
+    ? new Date(new Date(startTime).getTime() - 1).toISOString()
+    : new Date().toISOString();
+  return { text, timestamp: ts };
+}
+
 // ─── Claude Writer ─────────────────────────────────────────────
 
 export async function writeClaudeSession(session: UnifiedSession, projectCwd: string): Promise<string> {
@@ -36,8 +52,21 @@ export async function writeClaudeSession(session: UnifiedSession, projectCwd: st
     sessionId
   }));
 
+  // Handoff notice — tells the agent this history came from another session.
+  const notice = handoffNotice(session.agent, session.startTime);
+  const noticeUuid = crypto.randomUUID();
+  lines.push(JSON.stringify({
+    parentUuid: null,
+    isSidechain: false,
+    type: 'assistant',
+    message: { role: 'assistant', content: [{ type: 'text', text: notice.text }] },
+    uuid: noticeUuid,
+    timestamp: notice.timestamp,
+    sessionId
+  }));
+
   // Convert messages
-  let prevUuid: string | null = null;
+  let prevUuid: string | null = noticeUuid;
   for (const msg of session.messages) {
     const uuid = crypto.randomUUID();
     if (msg.role === 'user') {
@@ -89,6 +118,18 @@ export async function writeGeminiSession(session: UnifiedSession, projectCwd: st
   const filePath = path.join(chatsDir, fileName);
 
   const messages: any[] = [];
+
+  // Handoff notice as a gemini (assistant) message before the real history.
+  const notice = handoffNotice(session.agent, session.startTime);
+  messages.push({
+    id: crypto.randomUUID(),
+    timestamp: notice.timestamp,
+    type: 'gemini',
+    content: notice.text,
+    thoughts: [],
+    tokens: { input: 0, output: 0, cached: 0, thoughts: 0, tool: 0, total: 0 },
+    model: session.model || 'unknown'
+  });
 
   for (const msg of session.messages) {
     if (msg.role === 'user') {
@@ -223,6 +264,23 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
       model_context_window: 258400,
       collaboration_mode_kind: 'default'
     }
+  }));
+
+  // Handoff notice as agent_message + response_item before the real history.
+  const notice = handoffNotice(session.agent, session.startTime);
+  lines.push(JSON.stringify({
+    timestamp: notice.timestamp,
+    type: 'response_item',
+    payload: {
+      type: 'message',
+      role: 'assistant',
+      content: [{ type: 'output_text', text: notice.text }]
+    }
+  }));
+  lines.push(JSON.stringify({
+    timestamp: notice.timestamp,
+    type: 'event_msg',
+    payload: { type: 'agent_message', message: notice.text, phase: null, memory_citation: null }
   }));
 
   // Convert messages

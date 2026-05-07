@@ -55,13 +55,14 @@ describe('writeClaudeSession', () => {
     // Second line: permission mode
     expect(lines[1].type).toBe('permission-mode');
 
-    // Messages
+    // Messages — first assistant line is the handoff notice
     const userLines = lines.filter(l => l.type === 'user');
     const assistantLines = lines.filter(l => l.type === 'assistant');
     expect(userLines).toHaveLength(2);
-    expect(assistantLines).toHaveLength(2);
+    expect(assistantLines).toHaveLength(3); // 1 notice + 2 real
+    expect(assistantLines[0].message.content[0].text).toContain('transferred from');
     expect(userLines[0].message.content).toBe('Hello');
-    expect(assistantLines[0].message.content[0].text).toBe('Hi there!');
+    expect(assistantLines[1].message.content[0].text).toBe('Hi there!');
   });
 
   it('roundtrips correctly through parse', async () => {
@@ -69,11 +70,13 @@ describe('writeClaudeSession', () => {
     const filePath = await writeClaudeSession(mockSession, '/Users/test/project');
     const parsed = await parseClaudeSession(filePath);
 
-    expect(parsed.messages).toHaveLength(4);
-    expect(parsed.messages[0].text).toBe('Hello');
-    expect(parsed.messages[1].text).toBe('Hi there!');
-    expect(parsed.messages[2].text).toBe('Do something');
-    expect(parsed.messages[3].text).toBe('Done!');
+    // +1 for handoff notice
+    expect(parsed.messages).toHaveLength(5);
+    expect(parsed.messages[0].text).toContain('transferred from');
+    expect(parsed.messages[1].text).toBe('Hello');
+    expect(parsed.messages[2].text).toBe('Hi there!');
+    expect(parsed.messages[3].text).toBe('Do something');
+    expect(parsed.messages[4].text).toBe('Done!');
   });
 });
 
@@ -97,13 +100,15 @@ describe('writeGeminiSession', () => {
     expect(meta[TRANSFER_MARKER]).toBeDefined();
     expect(meta[TRANSFER_MARKER].source_agent).toBe('claude');
 
-    // Following lines: messages
+    // Following lines: notice + messages
     const msgs = lines.slice(1);
-    expect(msgs).toHaveLength(4);
-    expect(msgs[0].type).toBe('user');
-    expect(msgs[0].content[0].text).toBe('Hello');
-    expect(msgs[1].type).toBe('gemini');
-    expect(msgs[1].content).toBe('Hi there!');
+    expect(msgs).toHaveLength(5); // 1 notice + 4 real
+    expect(msgs[0].type).toBe('gemini');
+    expect(msgs[0].content).toContain('transferred from');
+    expect(msgs[1].type).toBe('user');
+    expect(msgs[1].content[0].text).toBe('Hello');
+    expect(msgs[2].type).toBe('gemini');
+    expect(msgs[2].content).toBe('Hi there!');
   });
 
   it('roundtrips correctly through parse', async () => {
@@ -111,9 +116,10 @@ describe('writeGeminiSession', () => {
     const filePath = await writeGeminiSession(mockSession, '/Users/test/project');
     const parsed = await parseGeminiSession(filePath);
 
-    expect(parsed.messages).toHaveLength(4);
-    expect(parsed.messages[0].text).toBe('Hello');
-    expect(parsed.messages[3].text).toBe('Done!');
+    expect(parsed.messages).toHaveLength(5); // 1 notice + 4 real
+    expect(parsed.messages[0].text).toContain('transferred from');
+    expect(parsed.messages[1].text).toBe('Hello');
+    expect(parsed.messages[4].text).toBe('Done!');
   });
 });
 
@@ -138,11 +144,12 @@ describe('writeCodexSession', () => {
     expect(lines[0].payload[TRANSFER_MARKER]).toBeDefined();
     expect(lines[0].payload[TRANSFER_MARKER].source_agent).toBe('claude');
 
-    // Check user/assistant messages exist
+    // Check user/assistant messages — first assistant is handoff notice
     const userItems = lines.filter(l => l.type === 'response_item' && l.payload?.role === 'user');
     const assistantItems = lines.filter(l => l.type === 'response_item' && l.payload?.role === 'assistant');
     expect(userItems).toHaveLength(2);
-    expect(assistantItems).toHaveLength(2);
+    expect(assistantItems).toHaveLength(3); // 1 notice + 2 real
+    expect(assistantItems[0].payload.content[0].text).toContain('transferred from');
   });
 
   it('roundtrips correctly through parse', async () => {
@@ -150,8 +157,9 @@ describe('writeCodexSession', () => {
     const filePath = await writeCodexSession(mockSession, '/Users/test/project');
     const parsed = await parseCodexSession(filePath);
 
-    expect(parsed.messages).toHaveLength(4);
-    expect(parsed.messages[0].text).toBe('Hello');
-    expect(parsed.messages[3].text).toBe('Done!');
+    expect(parsed.messages).toHaveLength(5); // 1 notice + 4 real
+    expect(parsed.messages[0].text).toContain('transferred from');
+    expect(parsed.messages[1].text).toBe('Hello');
+    expect(parsed.messages[4].text).toBe('Done!');
   });
 });
