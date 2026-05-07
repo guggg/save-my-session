@@ -33,7 +33,7 @@ Then (optional):
 save-my-session install
 ```
 
-This appends a block into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md` (wrapped in `<!-- save-my-session:start -->` markers so you can `uninstall` cleanly). Each agent will now proactively offer a handoff when it notices rate-limit warnings or an unusually long session.
+This appends a block into `~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md` (wrapped in `<!-- save-my-session:start -->` markers so you can `uninstall` cleanly). Each agent now knows the handoff flow and how to write a summary when you ask to switch.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-install.svg" alt="install demo" width="820">
@@ -105,8 +105,11 @@ Messages are deduped by content (role + text) against the target, so it is safe 
 
 ### Remove the injected prompts
 
+Run `uninstall` before removing the package so the injected prompts are cleaned up. `npm uninstall` will attempt to run this automatically via `preuninstall`, but it is not guaranteed on all platforms — running it manually first is safer.
+
 ```bash
 save-my-session uninstall
+npm uninstall -g save-my-session
 ```
 
 ## Where each agent stores sessions

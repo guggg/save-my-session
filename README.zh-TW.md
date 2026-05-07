@@ -33,7 +33,7 @@ npm install -g save-my-session
 save-my-session install
 ```
 
-這會在 `~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md` 各注入一段指示（用 `<!-- save-my-session:start -->` 標記包起來，隨時可 `uninstall` 乾淨移除）。裝完後各 agent 會在 session 變長或遇到 rate limit 時主動提醒你可以交接。
+這會在 `~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md` 各注入一段指示（用 `<!-- save-my-session:start -->` 標記包起來，隨時可 `uninstall` 乾淨移除）。裝完後，當你說想切換 agent 時，當前 agent 就知道要怎麼寫 handoff summary 並給你轉移指令。
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-install.zh.svg" alt="install 示範" width="820">
@@ -105,8 +105,11 @@ save-my-session transfer --from gemini --to claude --append <原本的 claude se
 
 ### 移除注入的指示
 
+建議先執行 `uninstall` 清除注入的 prompt，再移除套件。`npm uninstall` 會嘗試透過 `preuninstall` 自動執行，但不保證在所有環境都能觸發，手動先跑比較保險。
+
 ```bash
 save-my-session uninstall
+npm uninstall -g save-my-session
 ```
 
 ## Session 檔案位置

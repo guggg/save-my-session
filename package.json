@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc && cp -r src/prompts dist/prompts",
     "dev": "ts-node src/cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "preuninstall": "save-my-session uninstall || true"
   },
   "keywords": [
     "ai",

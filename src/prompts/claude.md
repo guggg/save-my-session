@@ -1,73 +1,72 @@
 ## Session Handoff (save-my-session)
 
-你已安裝 save-my-session 工具，它會把 Claude Code 的 session 直接轉成 Gemini CLI / Codex 的原生格式，讓下一個 Agent 直接「繼續」這場對話，不需要重新 briefing。
+You have save-my-session installed. It converts Claude Code sessions into Gemini CLI / Codex native format so the next agent can pick up right where you left off — no re-briefing needed.
 
-### 額度監控
-- 注意你的 API 使用量。當你感覺到回應速度明顯變慢、收到 rate limit 警告、或這個 session 已經進行超過 30 輪對話，主動提醒使用者：
-  「⚠️ 額度可能快到上限了，要不要把這個 session 轉接到其他 Agent？（Gemini CLI / Codex）」
-- 如果使用者同意，走下面的交接流程。
+### When to hand off
 
-### 為什麼需要先寫 handoff summary
+When the user says they want to switch agents (e.g. "transfer to Gemini", "switch to Codex"), follow the handoff flow below.
+You cannot detect quota limits or count conversation turns — those signals are invisible to you. The user decides when to switch.
 
-save-my-session **只會轉移 user / assistant 的文字訊息**，`tool_use`、`tool_result`、thinking block 都不會帶過去。也就是說：下一個 Agent 看不到你讀過什麼檔案、跑過什麼指令、看到什麼輸出，只看得到你們雙方講過的話。
+### Why you must write a handoff summary first
 
-而且 **使用者是在對話外層執行 transfer 指令**——你不會知道他何時按下 Enter，所以**不能等到移交當下才補上下文**。只要你判斷這個 session 有機會被移交（例如你已提醒過額度問題、或使用者表達想切換），**就必須在當下那則回覆裡直接寫好 handoff summary**，讓它留在對話紀錄裡。之後何時 transfer 都不影響。
+save-my-session **only transfers user / assistant text messages**. `tool_use`, `tool_result`, and thinking blocks are not included. This means the next agent cannot see what files you read, what commands you ran, or what outputs you saw — only the words exchanged between you and the user.
 
-### Handoff summary 寫什麼
+The user runs the transfer command **outside the conversation** — you will not know when they press Enter. So **do not wait until the moment of handoff to add context**. As soon as you sense this session may be transferred (e.g. you've mentioned a quota concern, or the user has expressed a desire to switch), **write the handoff summary in that same reply** so it stays in the conversation history. It doesn't matter when the transfer actually happens.
 
-在提議 transfer 的**同一則回覆**裡，用一段獨立的 markdown 區塊總結：
+### What to include in the handoff summary
+
+In the **same reply** where you propose the transfer, include a standalone markdown block:
 
 ```
 ## Handoff summary
 
-**目前在做什麼**：（1-2 句描述本次 session 的主要任務）
+**What we're doing**: (1-2 sentences describing the main task of this session)
 
-**已完成**：
-- （條列式，具體到檔案路徑 / 函式名 / commit hash）
+**Completed**:
+- (bullet list, specific to file paths / function names / commit hashes)
 
-**改了哪些檔**：
-- `path/to/file.ts:行號` — 做了什麼改動、為什麼
-- （未 commit 的改動也要列）
+**Files changed**:
+- `path/to/file.ts:line` — what was changed and why
+- (include uncommitted changes too)
 
-**關鍵決策與理由**：
-- （為什麼選方案 X 而不是 Y，來源是哪個檔案 / 文件 / 使用者偏好）
+**Key decisions and rationale**:
+- (why option X was chosen over Y, referencing files / docs / user preferences)
 
-**未完成 / 下一步**：
-- （下一個 Agent 應該做的第一件事）
+**Not done yet / next steps**:
+- (the first thing the next agent should do)
 
-**需要注意的陷阱**：
-- （例如「第 N 行的邏輯看起來可疑但先不動」、「這個測試是 flaky」等）
+**Gotchas to watch out for**:
+- (e.g. "logic on line N looks suspicious but left alone", "this test is flaky")
 ```
 
-寫 summary 時，**把你從 tool_result 得到的關鍵資訊用自然語言寫進來**（例如「我讀了 `foo.ts`，發現它其實用了 X pattern」），這樣才會被帶過去。不要只寫「做了重構」這種沒有資訊量的句子。
+When writing the summary, **translate key findings from tool results into plain language** (e.g. "I read `foo.ts` and found it uses pattern X"). Do not write vague sentences like "did a refactor" — they carry no information for the next agent.
 
-### 交接流程
+### Handoff flow
 
-告訴使用者：在**專案根目錄**執行下列指令之一（擇一），就會把目前 session 完整複製到目標 Agent 的 session 目錄。
+Tell the user to run one of the following from the **project root**:
 
-- 轉到 Gemini CLI：
+- Transfer to Gemini CLI:
   ```
   save-my-session transfer --from claude --to gemini
   ```
-- 轉到 Codex：
+- Transfer to Codex:
   ```
   save-my-session transfer --from claude --to codex
   ```
 
-執行完之後，告訴使用者：
-1. 打開對應的 CLI（`gemini` 或 `codex`）
-2. 在裡面用 `/resume`（或該 Agent 的歷史 session 選單）挑選剛轉過去的 session
-3. 選中後即可繼續對話，完整歷史都在
+After the command completes, tell the user to:
+1. Open the target CLI (`gemini` or `codex`)
+2. Use `/resume` (or the agent's session history picker) to select the transferred session
+3. The full conversation history will be there
 
-（預設使用流程就是 **transfer → 開 CLI → `/resume` 挑 session**，不是直接打開 CLI 就會自動載入。）
+(The default flow is **transfer → open CLI → `/resume` to pick session**. The session is not loaded automatically just by opening the CLI.)
 
-### 常用輔助指令（提供給使用者參考）
+### Useful commands (for the user's reference)
 
-- 列出目前專案可轉移的 session：`save-my-session list --from claude`
-- 指定某個特定 session 轉移：`save-my-session transfer --from claude --to gemini --session <path>`
-- 把別的 Agent 做過的新進度 append 回你原本的 session（跨來回交接）：
-  `save-my-session transfer --from gemini --to claude --append <目標 session 檔案路徑>`
+- List transferable sessions for this project: `save-my-session list --from claude`
+- Transfer a specific session: `save-my-session transfer --from claude --to gemini --session <hash>`
+- Append new progress from another agent back into this session: `save-my-session transfer --from gemini --to claude --append <target-session-path>`
 
-### 注意
-- 指令預設以 `cwd` 當作專案識別，所以**一定要在專案根目錄執行**，否則會找不到 session。
-- 若不在根目錄，請加 `--cwd <專案根目錄>`。
+### Notes
+- Commands use `cwd` as the project identifier, so **always run from the project root** or the session won't be found.
+- If not in the root, add `--cwd <project-root>`.

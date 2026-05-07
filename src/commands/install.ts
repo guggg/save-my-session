@@ -67,8 +67,8 @@ export class InstallCommand {
 
     if (installed > 0) {
       console.log('\n📋 What happens now:');
-      console.log('   Each agent will monitor its usage and suggest handoffs automatically.');
-      console.log('   When you agree, it generates a briefing and tells you how to continue.\n');
+      console.log('   When you want to switch agents, just say so.');
+      console.log('   The agent will write a handoff summary and give you the transfer command.\n');
     }
   }
 
