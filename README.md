@@ -97,6 +97,8 @@ Scenario: you started in Claude → transferred to Gemini → did more work ther
 save-my-session transfer --from gemini --to claude --append <hash-or-path>
 ```
 
+The hash passed to `--append` belongs to the **target** side (the session you want to write into), not the source. Use `save-my-session list --from <target>` to find it.
+
 Messages are deduped by content (role + text) against the target, so it is safe to rerun — a second invocation appends 0. Add `--force` to bypass dedup and append every source message verbatim.
 
 <p align="center">
@@ -118,7 +120,7 @@ npm uninstall -g save-my-session
 |---|---|
 | Claude Code | `~/.claude/projects/<path-with-dashes>/<uuid>.jsonl` |
 | Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.jsonl` (slug from `~/.gemini/projects.json`; session metadata includes `projectHash = sha256(cwd)`) |
-| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (`cwd` is inside `session_meta`) |
+| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` (`cwd` inside `session_meta`). Codex also tracks sessions in `~/.codex/state_5.sqlite` (`threads` table); `/resume` reads from there, so transfers register the session in both places. |
 
 Transferred files carry a `_transferred_by_save_my_session` marker. `list` skips a transferred session only if it has not been touched since the transfer — if you kept chatting in it, it shows up as a normal source again.
 

@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import { execSync } from 'child_process';
 import { UnifiedSession, AgentType, claudeProjectSlug } from './types.js';
 
 export const TRANSFER_MARKER = '_transferred_by_save_my_session';
@@ -252,6 +253,21 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
           content: [{ type: 'input_text', text: msg.text }]
         }
       }));
+
+      // Codex indexes title / first_user_message from event_msg user_message,
+      // not from response_item role=user. Without this, /resume picker hides
+      // the session (picker filters on first_user_message <> '').
+      lines.push(JSON.stringify({
+        timestamp: msg.timestamp,
+        type: 'event_msg',
+        payload: {
+          type: 'user_message',
+          message: msg.text,
+          images: [],
+          local_images: [],
+          text_elements: []
+        }
+      }));
     }
 
     if (msg.role === 'assistant') {
@@ -264,24 +280,72 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
           content: [{ type: 'output_text', text: msg.text }]
         }
       }));
+
+      // Codex UI re-plays assistant messages from event_msg agent_message
+      // during /resume. Without this, the assistant replies disappear from
+      // history (even though response_item is still there for the model).
+      lines.push(JSON.stringify({
+        timestamp: msg.timestamp,
+        type: 'event_msg',
+        payload: {
+          type: 'agent_message',
+          message: msg.text,
+          phase: null,
+          memory_citation: null
+        }
+      }));
     }
   }
 
   await fs.writeFile(filePath, lines.join('\n') + '\n', 'utf-8');
 
-  // Register the session in Codex's session_index.jsonl so /resume lists it.
+  // Pick the first substantive user message for title/first_user_message.
+  // Skip synthetic/command messages injected by agents (<command-name>, <local-command-stdout>, etc.)
+  const isSynthetic = (text: string) =>
+    /^<(command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat)/i.test(text.trim()) ||
+    text.trim().length === 0;
+  const firstRealUser = session.messages.find(m => m.role === 'user' && !isSynthetic(m.text));
+  const firstUserMessage = (firstRealUser?.text || session.messages.find(m => m.role === 'user')?.text || '').replace(/\s+/g, ' ').trim();
+  const title = firstUserMessage.slice(0, 60) || 'Transferred session';
+
+  // Register in session_index.jsonl (older Codex versions read this).
   const indexPath = path.join(codexHome, 'session_index.jsonl');
-  const threadName = session.messages.find(m => m.role === 'user')?.text?.slice(0, 60).replace(/\n/g, ' ').trim() || 'Transferred session';
-  const indexEntry = JSON.stringify({
-    id: sessionId,
-    thread_name: threadName,
-    updated_at: now.toISOString()
-  });
+  const indexEntry = JSON.stringify({ id: sessionId, thread_name: title, updated_at: now.toISOString() });
   try {
     await fs.appendFile(indexPath, indexEntry + '\n', 'utf-8');
   } catch {
-    // Index file might not exist yet — create it.
     await fs.writeFile(indexPath, indexEntry + '\n', 'utf-8');
+  }
+
+  // Register in state_5.sqlite — this is what /resume actually reads.
+  const dbPath = path.join(codexHome, 'state_5.sqlite');
+  const nowSec = Math.floor(now.getTime() / 1000);
+  const sandboxPolicy = JSON.stringify({
+    type: 'workspace-write',
+    writable_roots: [path.join(codexHome, 'memories')],
+    network_access: false,
+    exclude_tmpdir_env_var: false,
+    exclude_slash_tmp: false
+  });
+  try {
+    // Escape single quotes for SQL literals. No newlines in our values
+    // because we already collapsed whitespace above.
+    const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+    const truncatedFirstUser = firstUserMessage.slice(0, 200);
+    const sql = `INSERT OR IGNORE INTO threads (
+  id, rollout_path, created_at, updated_at, source, model_provider,
+  cwd, title, sandbox_policy, approval_mode, tokens_used, has_user_event,
+  archived, git_sha, git_branch, git_origin_url, cli_version,
+  first_user_message, memory_mode
+) VALUES (
+  ${q(sessionId)}, ${q(filePath)}, ${nowSec}, ${nowSec}, 'cli', 'openai',
+  ${q(projectCwd)}, ${q(title)}, ${q(sandboxPolicy)},
+  'on-request', 0, 1, 0, '', '', '', '0.128.0',
+  ${q(truncatedFirstUser)}, 'enabled'
+);`;
+    execSync(`sqlite3 ${JSON.stringify(dbPath)}`, { input: sql, stdio: ['pipe', 'ignore', 'ignore'] });
+  } catch {
+    // sqlite3 CLI might not be available or schema may have changed — not fatal.
   }
 
   return filePath;
@@ -489,6 +553,20 @@ async function appendToCodex(
           content: [{ type: 'input_text', text: msg.text }]
         }
       }));
+
+      // Codex UI re-plays user messages from event_msg user_message during
+      // /resume — without this, appended user turns disappear from history.
+      lines.push(JSON.stringify({
+        timestamp: msg.timestamp,
+        type: 'event_msg',
+        payload: {
+          type: 'user_message',
+          message: msg.text,
+          images: [],
+          local_images: [],
+          text_elements: []
+        }
+      }));
     }
     if (msg.role === 'assistant') {
       lines.push(JSON.stringify({
@@ -498,6 +576,20 @@ async function appendToCodex(
           type: 'message',
           role: 'assistant',
           content: [{ type: 'output_text', text: msg.text }]
+        }
+      }));
+
+      // Codex UI re-plays assistant messages from event_msg agent_message
+      // during /resume. Without this, the assistant replies disappear from
+      // history (even though response_item is still there for the model).
+      lines.push(JSON.stringify({
+        timestamp: msg.timestamp,
+        type: 'event_msg',
+        payload: {
+          type: 'agent_message',
+          message: msg.text,
+          phase: null,
+          memory_citation: null
         }
       }));
     }

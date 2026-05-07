@@ -97,6 +97,8 @@ save-my-session transfer --from gemini --to codex --session <path>
 save-my-session transfer --from gemini --to claude --append <hash 或完整路徑>
 ```
 
+`--append` 後面的 hash 指的是**目標 session**（要被寫入的那個），不是 source。用 `save-my-session list --from <target>` 找。
+
 用訊息內容（role + text）和目標 session 去重，重複執行也安全，第二次會回報 `appended: 0`。若要略過去重、把來源所有訊息都塞進去，加 `--force`。
 
 <p align="center">
@@ -118,7 +120,7 @@ npm uninstall -g save-my-session
 |---|---|
 | Claude Code | `~/.claude/projects/<path-with-dashes>/<uuid>.jsonl` |
 | Gemini CLI | `~/.gemini/tmp/<slug>/chats/session-<ts>-<uuid>.jsonl`（slug 來自 `~/.gemini/projects.json`；session metadata 含 `projectHash = sha256(cwd)`）|
-| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡） |
+| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`（`cwd` 在 `session_meta` 裡）。Codex 另外會在 `~/.codex/state_5.sqlite` 的 `threads` 表裡追蹤 session；`/resume` 讀的是這個 DB，所以轉移時兩邊都會註冊。 |
 
 轉移寫入的檔案會帶一個 `_transferred_by_save_my_session` 標記。`list` 只會跳過「轉移後完全沒再動過」的檔案；如果你在 agent 裡繼續對話，這個 session 會被當成新的來源出現。
 
