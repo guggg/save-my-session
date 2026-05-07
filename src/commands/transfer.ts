@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import path from 'path';
-import { AgentType, findLatestSession, resolveSessionPath, parseSession, writeSession, appendToSession } from '../transfer/index.js';
+import { AgentType, findLatestSession, resolveSessionPath, parseSession, writeSession } from '../transfer/index.js';
 import { ListCommand } from './list.js';
+import { AppendCommand } from './append.js';
 
 export interface TransferOptions {
   from: AgentType;
@@ -31,6 +32,20 @@ export class TransferCommand {
 
     const to = options.to!;
 
+    // Delegate --append to the standalone command so the two code paths don't drift.
+    if (options.append) {
+      console.log(chalk.yellow(`⚠️  --append on "transfer" is deprecated. Use: save-my-session append --from ${from} --to ${to} --target ${options.append}`));
+      await new AppendCommand().execute({
+        from,
+        to,
+        cwd,
+        sessionFile: options.sessionFile,
+        target: options.append,
+        force: options.force
+      });
+      return;
+    }
+
     if (from === to) {
       throw new Error('Source and target agent cannot be the same');
     }
@@ -57,11 +72,6 @@ export class TransferCommand {
       console.log(`   Last modified: ${found.lastModified.toLocaleString()}\n`);
     }
 
-    // Resolve --append target (may also be a hash)
-    if (options.append) {
-      options.append = await resolveSessionPath(options.append, to, cwd);
-    }
-
     // 2. Parse session
     console.log(`📖 Parsing ${AGENT_LABELS[from]} session...`);
     const session = await parseSession(sessionPath, from);
@@ -75,27 +85,13 @@ export class TransferCommand {
     const assistantMsgs = session.messages.filter(m => m.role === 'assistant');
     console.log(`   ${userMsgs.length} user messages, ${assistantMsgs.length} assistant messages\n`);
 
-    // 3. Write or append
-    if (options.append) {
-      console.log(`📎 Appending to existing ${AGENT_LABELS[to]} session...`);
-      const { appended } = await appendToSession(session, options.append, to, options.force);
+    // 3. Write
+    console.log(`✍️  Writing ${AGENT_LABELS[to]} session...`);
+    const outputPath = await writeSession(session, to, cwd);
+    console.log(`   Saved to: ${outputPath}\n`);
 
-      if (appended === 0) {
-        console.log('   No new messages to append (all messages are older than the target session).\n');
-      } else {
-        console.log(`   Appended ${appended} messages to: ${options.append}\n`);
-        console.log(chalk.green('✅ Append complete!\n'));
-        console.log(`The ${AGENT_LABELS[from]} conversation has been merged into your ${AGENT_LABELS[to]} session.\n`);
-      }
-    } else {
-      console.log(`✍️  Writing ${AGENT_LABELS[to]} session...`);
-      const outputPath = await writeSession(session, to, cwd);
-      console.log(`   Saved to: ${outputPath}\n`);
-
-      console.log(chalk.green('✅ Transfer complete!\n'));
-      console.log(`Next: open ${AGENT_LABELS[to]} in this project directory, and it should see the transferred session.`);
-      console.log(`The session contains your full conversation history from ${AGENT_LABELS[from]}.\n`);
-    }
+    console.log(chalk.green('✅ Transfer complete!\n'));
+    console.log(`Next: open ${AGENT_LABELS[to]} in this project directory, and it should see the transferred session.`);
+    console.log(`The session contains your full conversation history from ${AGENT_LABELS[from]}.\n`);
   }
-
 }

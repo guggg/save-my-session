@@ -18,7 +18,7 @@
 
 - **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
 - **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md`），讓 agent 自己偵測額度、主動建議交接。
-- **`--append`**：把另一個 agent 做過的進度回寫到原本的 session，方便來回切換。用訊息內容（role + text）去重，重複執行也安全。
+- **`append`**：把另一個 agent 做過的進度回寫到既有 session，方便來回切換。用訊息內容（role + text）去重，重複執行也安全。
 - **`list`**：列出目前專案所有 session，附帶最後一則使用者訊息、訊息數、時間區間。
 
 ## 安裝
@@ -94,15 +94,17 @@ save-my-session transfer --from gemini --to codex --session <path>
 情境：Claude 做了一段 → transfer 到 Gemini 繼續做 → 想回 Claude 時，不想開新 session，想接回原本那個：
 
 ```bash
-save-my-session transfer --from gemini --to claude --append <hash 或完整路徑>
+save-my-session append --from gemini --to claude --target <目標 hash 或完整路徑>
 ```
 
-`--append` 後面的 hash 指的是**目標 session**（要被寫入的那個），不是 source。用 `save-my-session list --from <target>` 找。
+`--target` 是要寫入的目標 session；用 `save-my-session list --from <to>` 找到它的 hash（或直接給完整路徑）。source 預設抓最新那個 `--from` session，若要指定特定一個，加 `--session <hash>`。
 
 用訊息內容（role + text）和目標 session 去重，重複執行也安全，第二次會回報 `appended: 0`。若要略過去重、把來源所有訊息都塞進去，加 `--force`。
 
+> 舊的 `transfer --append <hash>` 寫法仍可用，但會印 deprecation 警告。
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.zh.svg" alt="--append 示範" width="860">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.zh.svg" alt="append 示範" width="860">
 </p>
 
 ### 移除注入的指示
@@ -135,7 +137,7 @@ npm uninstall -g save-my-session
 
 - 只轉 `user` / `assistant` 的文字訊息。`tool_use`、thinking block 等會被跳過（各家格式差異太大，轉過去也跑不了）。
 - Agent 啟動時不會自動「載入最新 session」——要自己用 `/resume`（或該 agent 的歷史選單）挑剛轉過去的那個 session。
-- `--append` 用訊息內容逐字比對（會 trim 掉前後空白）；如果兩邊訊息曾被編輯過，會被當成不同訊息。
+- `append` 用訊息內容逐字比對（會 trim 掉前後空白）；如果兩邊訊息曾被編輯過，會被當成不同訊息。
 
 ## 授權
 

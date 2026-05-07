@@ -65,7 +65,7 @@ After the command completes, tell the user to:
 
 - List transferable sessions for this project: `save-my-session list --from codex`
 - Transfer a specific session: `save-my-session transfer --from codex --to claude --session <hash>`
-- Append new progress from another agent back into this session: `save-my-session transfer --from claude --to codex --append <target-session-path>`
+- Append new progress from another agent back into this session: `save-my-session append --from claude --to codex --target <this-session-hash>`
 
 ### Notes
 - Commands use `cwd` as the project identifier, so **always run from the project root** or the session won't be found.

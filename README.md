@@ -18,7 +18,7 @@ When you juggle multiple AI coding agents (Claude Code, Gemini CLI, Codex), the 
 
 - **`transfer`** — convert a Claude / Gemini / Codex session file into another agent's native format, written straight into the target agent's session directory.
 - **`install`** — inject a handoff prompt into each agent's global system prompt (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`, `~/.codex/AGENTS.md`) so each agent can monitor quota and suggest a handoff on its own.
-- **`--append`** — merge messages from another agent back into your original session, ideal for round-trip handoffs. Dedup is by content (role + text), so rerunning is safe.
+- **`append`** — merge messages from another agent back into an existing session, ideal for round-trip handoffs. Dedup is by content (role + text), so rerunning is safe.
 - **`list`** — list all sessions for the current project with last user message, counts, and time range.
 
 ## Install
@@ -94,15 +94,17 @@ The transfer writes a native session file into the target agent's directory, but
 Scenario: you started in Claude → transferred to Gemini → did more work there → want to continue in the **original** Claude session rather than a brand-new one:
 
 ```bash
-save-my-session transfer --from gemini --to claude --append <hash-or-path>
+save-my-session append --from gemini --to claude --target <target-hash-or-path>
 ```
 
-The hash passed to `--append` belongs to the **target** side (the session you want to write into), not the source. Use `save-my-session list --from <target>` to find it.
+`--target` is the session you want to write into; pass its hash from `save-my-session list --from <to>` (or the full path). The source session defaults to the latest `--from` session — use `--session <hash>` to pick a specific one.
 
 Messages are deduped by content (role + text) against the target, so it is safe to rerun — a second invocation appends 0. Add `--force` to bypass dedup and append every source message verbatim.
 
+> The old `transfer --append <hash>` form still works but prints a deprecation warning.
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.svg" alt="--append demo" width="860">
+  <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-append.svg" alt="append demo" width="860">
 </p>
 
 ### Remove the injected prompts
@@ -135,7 +137,7 @@ Transferred files carry a `_transferred_by_save_my_session` marker. `list` skips
 
 - Only `user` and `assistant` text messages are transferred. `tool_use`, thinking blocks, and similar are skipped (the formats differ too much across agents for lossless conversion).
 - Agents do not auto-load the newest session on startup — always use `/resume` (or the history picker) to pick the transferred file.
-- `--append` dedup compares message content exactly (after trimming whitespace). Messages that were edited between transfers will appear as new.
+- `append` dedup compares message content exactly (after trimming whitespace). Messages that were edited between transfers will appear as new.
 
 ## License
 

@@ -10,6 +10,7 @@ import { InstallCommand, UninstallCommand } from './commands/install.js';
 import { TransferCommand } from './commands/transfer.js';
 import { ListCommand } from './commands/list.js';
 import { PeekCommand } from './commands/peek.js';
+import { AppendCommand } from './commands/append.js';
 import { AgentType } from './transfer/types.js';
 import chalk from 'chalk';
 
@@ -51,6 +52,39 @@ program
         sessionFile: options.session,
         list: options.list,
         append: options.append,
+        force: options.force
+      });
+    } catch (error) {
+      console.error(chalk.red('❌ Error:'), (error as Error).message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('append')
+  .description('Append a source session into an existing target session (round-trip handoff)')
+  .requiredOption('--from <agent>', 'Source agent (claude|gemini|codex)')
+  .requiredOption('--to <agent>', 'Target agent (claude|gemini|codex)')
+  .requiredOption('--target <hash-or-path>', 'Target session (hash from `list --from <to>` or full path)')
+  .option('--cwd <path>', 'Project directory', process.cwd())
+  .option('--session <hash-or-path>', 'Source session (defaults to the latest for --from)')
+  .option('--force', 'Bypass content dedup — append every source message verbatim')
+  .action(async (options) => {
+    try {
+      const validAgents = ['claude', 'gemini', 'codex'];
+      if (!validAgents.includes(options.from)) {
+        throw new Error(`Invalid source agent: ${options.from}. Use: ${validAgents.join(', ')}`);
+      }
+      if (!validAgents.includes(options.to)) {
+        throw new Error(`Invalid target agent: ${options.to}. Use: ${validAgents.join(', ')}`);
+      }
+      const cmd = new AppendCommand();
+      await cmd.execute({
+        from: options.from as AgentType,
+        to: options.to as AgentType,
+        cwd: options.cwd,
+        sessionFile: options.session,
+        target: options.target,
         force: options.force
       });
     } catch (error) {
@@ -152,10 +186,10 @@ program
     console.log(chalk.gray('   $ save-my-session transfer --from gemini --to codex --session <path>\n'));
 
     console.log(chalk.bold('5. Merge changes back into an existing session:'));
-    console.log(chalk.gray('   $ save-my-session transfer --from gemini --to claude --append <target-session>\n'));
+    console.log(chalk.gray('   $ save-my-session append --from gemini --to claude --target <target-hash>\n'));
 
     console.log(chalk.bold('6. Force-append every message (bypass dedup):'));
-    console.log(chalk.gray('   $ save-my-session transfer --from gemini --to claude --append <target-session> --force\n'));
+    console.log(chalk.gray('   $ save-my-session append --from gemini --to claude --target <target-hash> --force\n'));
 
     console.log(chalk.bold('7. Remove the handoff prompts:'));
     console.log(chalk.gray('   $ save-my-session uninstall\n'));
