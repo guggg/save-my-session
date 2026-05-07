@@ -81,8 +81,20 @@ function extractClaudeAssistantText(content: any): string {
 // ─── Gemini ────────────────────────────────────────────────────
 
 export async function parseGeminiSession(filePath: string): Promise<UnifiedSession> {
+  // New Gemini format (.jsonl): line 1 is metadata, later lines are messages.
+  // Old format (.json): single JSON object with { ..., messages: [...] }.
   const content = await fs.readFile(filePath, 'utf-8');
-  const data = JSON.parse(content);
+  let data: any;
+  if (filePath.endsWith('.jsonl')) {
+    const lines = content.split('\n').filter(l => l.trim());
+    const [metaLine, ...messageLines] = lines;
+    data = metaLine ? JSON.parse(metaLine) : {};
+    data.messages = messageLines.map(l => {
+      try { return JSON.parse(l); } catch { return null; }
+    }).filter(Boolean);
+  } else {
+    data = JSON.parse(content);
+  }
 
   const messages: UnifiedMessage[] = [];
   let startTime = '';
@@ -108,8 +120,9 @@ export async function parseGeminiSession(filePath: string): Promise<UnifiedSessi
     }
   }
 
+  const ext = filePath.endsWith('.jsonl') ? '.jsonl' : '.json';
   return {
-    id: data.sessionId || path.basename(filePath, '.json'),
+    id: data.sessionId || path.basename(filePath, ext),
     agent: 'gemini',
     cwd: data.cwd || '',
     messages,

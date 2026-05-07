@@ -83,7 +83,8 @@ export async function writeGeminiSession(session: UnifiedSession, projectCwd: st
   const sessionId = crypto.randomUUID().split('-')[4]; // short uuid
   const now = new Date();
   const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `session-${timestamp}-${sessionId}.json`;
+  // Gemini CLI switched to .jsonl: metadata on line 1, one message per line.
+  const fileName = `session-${timestamp}-${sessionId}.jsonl`;
   const filePath = path.join(chatsDir, fileName);
 
   const messages: any[] = [];
@@ -111,15 +112,21 @@ export async function writeGeminiSession(session: UnifiedSession, projectCwd: st
     }
   }
 
-  const geminiSession = {
+  // projectHash is sha256 of the absolute cwd — Gemini uses this to bind
+  // a session to a project; /resume won't show the session without it.
+  const projectHash = crypto.createHash('sha256').update(projectCwd).digest('hex');
+
+  const meta = {
     sessionId: crypto.randomUUID(),
+    projectHash,
     startTime: session.startTime,
     lastUpdated: session.lastUpdated,
-    [TRANSFER_MARKER]: { source_agent: session.agent, transferred_at: new Date().toISOString() },
-    messages
+    kind: 'main',
+    [TRANSFER_MARKER]: { source_agent: session.agent, transferred_at: new Date().toISOString() }
   };
 
-  await fs.writeFile(filePath, JSON.stringify(geminiSession, null, 2), 'utf-8');
+  const lines = [JSON.stringify(meta), ...messages.map(m => JSON.stringify(m))];
+  await fs.writeFile(filePath, lines.join('\n') + '\n', 'utf-8');
   return filePath;
 }
 
@@ -168,21 +175,22 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
   const sessionDir = path.join(codexHome, 'sessions', year, month, day);
   await fs.mkdir(sessionDir, { recursive: true });
 
-  const sessionId = crypto.randomUUID();
-  const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const fileName = `rollout-${timestamp}-${sessionId}.jsonl`;
+  // Codex uses UUIDv7 (time-ordered) rather than v4. /resume won't list
+  // sessions whose id format it doesn't recognise.
+  const sessionId = uuidV7(now);
+  // Filename uses local time, matching native Codex sessions.
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const localTs =
+    `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}T` +
+    `${pad2(now.getHours())}-${pad2(now.getMinutes())}-${pad2(now.getSeconds())}`;
+  const fileName = `rollout-${localTs}-${sessionId}.jsonl`;
   const filePath = path.join(sessionDir, fileName);
 
   const lines: string[] = [];
 
-  // Transfer marker
-  lines.push(JSON.stringify({
-    type: TRANSFER_MARKER,
-    source_agent: session.agent,
-    transferred_at: now.toISOString()
-  }));
-
-  // Session meta
+  // Session meta (Codex requires this to be the first line for /resume to
+  // recognize the session). We embed the transfer marker inside the payload
+  // so the file is still identifiable but stays structurally valid.
   lines.push(JSON.stringify({
     timestamp: now.toISOString(),
     type: 'session_meta',
@@ -190,8 +198,29 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
       id: sessionId,
       timestamp: session.startTime,
       cwd: projectCwd,
-      originator: 'save-my-session',
-      source: 'cli'
+      originator: 'codex-tui',
+      cli_version: '0.128.0',
+      instructions: null,
+      source: 'cli',
+      model_provider: 'openai',
+      [TRANSFER_MARKER]: {
+        source_agent: session.agent,
+        transferred_at: now.toISOString()
+      }
+    }
+  }));
+
+  // event_msg / task_started — native Codex sessions have this on line 2.
+  // Some Codex versions may use it as a marker for a "real" session.
+  lines.push(JSON.stringify({
+    timestamp: now.toISOString(),
+    type: 'event_msg',
+    payload: {
+      type: 'task_started',
+      turn_id: crypto.randomUUID(),
+      started_at: Math.floor(now.getTime() / 1000),
+      model_context_window: 258400,
+      collaboration_mode_kind: 'default'
     }
   }));
 
@@ -239,7 +268,45 @@ export async function writeCodexSession(session: UnifiedSession, projectCwd: str
   }
 
   await fs.writeFile(filePath, lines.join('\n') + '\n', 'utf-8');
+
+  // Register the session in Codex's session_index.jsonl so /resume lists it.
+  const indexPath = path.join(codexHome, 'session_index.jsonl');
+  const threadName = session.messages.find(m => m.role === 'user')?.text?.slice(0, 60).replace(/\n/g, ' ').trim() || 'Transferred session';
+  const indexEntry = JSON.stringify({
+    id: sessionId,
+    thread_name: threadName,
+    updated_at: now.toISOString()
+  });
+  try {
+    await fs.appendFile(indexPath, indexEntry + '\n', 'utf-8');
+  } catch {
+    // Index file might not exist yet — create it.
+    await fs.writeFile(indexPath, indexEntry + '\n', 'utf-8');
+  }
+
   return filePath;
+}
+
+// Generate a UUIDv7 (time-ordered 128-bit). Codex expects this format.
+function uuidV7(now: Date): string {
+  const ts = BigInt(now.getTime()); // 48-bit unix ms
+  const rand = crypto.randomBytes(10);
+  const bytes = Buffer.alloc(16);
+  // 48-bit timestamp
+  bytes[0] = Number((ts >> 40n) & 0xffn);
+  bytes[1] = Number((ts >> 32n) & 0xffn);
+  bytes[2] = Number((ts >> 24n) & 0xffn);
+  bytes[3] = Number((ts >> 16n) & 0xffn);
+  bytes[4] = Number((ts >> 8n) & 0xffn);
+  bytes[5] = Number(ts & 0xffn);
+  // Copy 10 random bytes
+  rand.copy(bytes, 6);
+  // Version 7 in byte 6 high nibble
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  // Variant 10xx in byte 8 high 2 bits
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 // ─── Append ────────────────────────────────────────────────────
@@ -344,12 +411,10 @@ async function appendToGemini(
   filePath: string,
   model?: string
 ): Promise<void> {
-  const content = await fs.readFile(filePath, 'utf-8');
-  const data = JSON.parse(content);
-
+  const newMessages: any[] = [];
   for (const msg of messages) {
     if (msg.role === 'user') {
-      data.messages.push({
+      newMessages.push({
         id: crypto.randomUUID(),
         timestamp: msg.timestamp,
         type: 'user',
@@ -357,7 +422,7 @@ async function appendToGemini(
       });
     }
     if (msg.role === 'assistant') {
-      data.messages.push({
+      newMessages.push({
         id: crypto.randomUUID(),
         timestamp: msg.timestamp,
         type: 'gemini',
@@ -368,10 +433,30 @@ async function appendToGemini(
       });
     }
   }
+  const newLastUpdated = messages[messages.length - 1].timestamp;
 
-  data.lastUpdated = messages[messages.length - 1].timestamp;
-
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  if (filePath.endsWith('.jsonl')) {
+    // Update line 1 metadata's lastUpdated, then append messages as new lines.
+    const content = await fs.readFile(filePath, 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length > 0) {
+      try {
+        const meta = JSON.parse(lines[0]);
+        meta.lastUpdated = newLastUpdated;
+        lines[0] = JSON.stringify(meta);
+      } catch {
+        // malformed metadata — leave as is
+      }
+    }
+    const appended = [...lines, ...newMessages.map(m => JSON.stringify(m))];
+    await fs.writeFile(filePath, appended.join('\n') + '\n', 'utf-8');
+  } else {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const data = JSON.parse(content);
+    data.messages.push(...newMessages);
+    data.lastUpdated = newLastUpdated;
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  }
 }
 
 async function appendToCodex(

@@ -40,25 +40,39 @@ describe('Claude finder', () => {
     // Wait to ensure different mtime
     await new Promise(r => setTimeout(r, 50));
 
-    // Transferred session (newer mtime)
-    const transferred = [
-      JSON.stringify({ type: TRANSFER_MARKER, source_agent: 'gemini' }),
-      JSON.stringify({ type: 'permission-mode', sessionId: 'transferred-1' }),
-      JSON.stringify({ type: 'user', isMeta: false, message: { role: 'user', content: 'from gemini' }, timestamp: '2026-04-17T10:00:00Z', sessionId: 'transferred-1' }),
+    // Transferred but untouched — every message older than transferred_at.
+    const transferredAt = '2026-04-18T00:00:00Z';
+    const untouched = [
+      JSON.stringify({ type: TRANSFER_MARKER, source_agent: 'gemini', transferred_at: transferredAt }),
+      JSON.stringify({ type: 'permission-mode', sessionId: 'transferred-untouched' }),
+      JSON.stringify({ type: 'user', isMeta: false, message: { role: 'user', content: 'from gemini' }, timestamp: '2026-04-17T10:00:00Z', sessionId: 'transferred-untouched' }),
     ];
-    await fs.writeFile(path.join(projectDir, 'transferred-1.jsonl'), transferred.join('\n') + '\n');
+    await fs.writeFile(path.join(projectDir, 'transferred-untouched.jsonl'), untouched.join('\n') + '\n');
+
+    await new Promise(r => setTimeout(r, 50));
+
+    // Transferred and continued — has a message newer than transferred_at,
+    // so user clearly kept chatting after /resume.
+    const continued = [
+      JSON.stringify({ type: TRANSFER_MARKER, source_agent: 'gemini', transferred_at: transferredAt }),
+      JSON.stringify({ type: 'permission-mode', sessionId: 'transferred-continued' }),
+      JSON.stringify({ type: 'user', isMeta: false, message: { role: 'user', content: 'from gemini' }, timestamp: '2026-04-17T10:00:00Z', sessionId: 'transferred-continued' }),
+      JSON.stringify({ type: 'user', isMeta: false, message: { role: 'user', content: 'new chat after resume' }, timestamp: '2026-04-19T10:00:00Z', sessionId: 'transferred-continued' }),
+    ];
+    await fs.writeFile(path.join(projectDir, 'transferred-continued.jsonl'), continued.join('\n') + '\n');
   });
 
-  it('skips transferred sessions', async () => {
+  it('skips untouched transferred sessions, keeps continued ones', async () => {
+    const all = await findAllSessions(projectCwd, 'claude');
+    const names = all.map(s => path.basename(s.filePath)).sort();
+    expect(names).toEqual(['native-1.jsonl', 'transferred-continued.jsonl']);
+  });
+
+  it('latest picks the most-recently-modified kept session', async () => {
     const found = await findLatestSession(projectCwd, 'claude');
     expect(found).not.toBeNull();
-    expect(found!.filePath).toContain('native-1.jsonl');
-  });
-
-  it('findAllSessions excludes transferred', async () => {
-    const all = await findAllSessions(projectCwd, 'claude');
-    expect(all).toHaveLength(1);
-    expect(all[0].filePath).toContain('native-1.jsonl');
+    // transferred-continued was written last, so it has the newest mtime.
+    expect(found!.filePath).toContain('transferred-continued.jsonl');
   });
 
   it('returns null for nonexistent project', async () => {
@@ -163,12 +177,27 @@ describe('Codex finder', () => {
 
     await new Promise(r => setTimeout(r, 50));
 
-    // Transferred session
+    // Transferred session — marker embedded in session_meta payload
     const transferred = [
-      JSON.stringify({ type: TRANSFER_MARKER, source_agent: 'claude' }),
-      JSON.stringify({ timestamp: '2026-04-16T11:00:00Z', type: 'session_meta', payload: { id: 'cx2', cwd: projectCwd } }),
+      JSON.stringify({
+        timestamp: '2026-04-16T11:00:00Z',
+        type: 'session_meta',
+        payload: {
+          id: 'cx2',
+          cwd: projectCwd,
+          [TRANSFER_MARKER]: { source_agent: 'claude', transferred_at: '2026-04-16T11:00:00Z' }
+        }
+      }),
     ];
     await fs.writeFile(path.join(dayDir, 'rollout-transferred.jsonl'), transferred.join('\n') + '\n');
+
+    // Legacy transferred session — standalone marker line 1, session_meta line 2.
+    // Codex /resume cannot load this layout, so finder should skip it.
+    const legacyTransferred = [
+      JSON.stringify({ type: TRANSFER_MARKER, source_agent: 'claude' }),
+      JSON.stringify({ timestamp: '2026-04-16T11:30:00Z', type: 'session_meta', payload: { id: 'cx-legacy', cwd: projectCwd } }),
+    ];
+    await fs.writeFile(path.join(dayDir, 'rollout-legacy-transferred.jsonl'), legacyTransferred.join('\n') + '\n');
 
     // Session for different project
     const other = [
@@ -177,15 +206,16 @@ describe('Codex finder', () => {
     await fs.writeFile(path.join(dayDir, 'rollout-other.jsonl'), other.join('\n') + '\n');
   });
 
-  it('skips transferred sessions and wrong projects', async () => {
+  it('includes embedded-marker transfers, skips legacy-marker files, filters wrong projects', async () => {
+    // The newest non-legacy file (embedded marker) should come first
     const found = await findLatestSession(projectCwd, 'codex');
     expect(found).not.toBeNull();
-    expect(found!.filePath).toContain('rollout-native.jsonl');
+    expect(found!.filePath).toContain('rollout-transferred.jsonl');
   });
 
-  it('findAllSessions filters correctly', async () => {
+  it('findAllSessions keeps native + embedded-marker transfers, skips legacy-marker', async () => {
     const all = await findAllSessions(projectCwd, 'codex');
-    expect(all).toHaveLength(1);
-    expect(all[0].filePath).toContain('rollout-native.jsonl');
+    const names = all.map(s => path.basename(s.filePath)).sort();
+    expect(names).toEqual(['rollout-native.jsonl', 'rollout-transferred.jsonl']);
   });
 });

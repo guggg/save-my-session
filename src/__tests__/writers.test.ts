@@ -78,7 +78,7 @@ describe('writeClaudeSession', () => {
 });
 
 describe('writeGeminiSession', () => {
-  it('writes valid Gemini JSON with transfer marker', async () => {
+  it('writes valid Gemini JSONL with transfer marker on metadata line', async () => {
     // Create projects.json
     const geminiHome = path.join(tmpDir, '.gemini');
     await fs.mkdir(geminiHome, { recursive: true });
@@ -87,18 +87,23 @@ describe('writeGeminiSession', () => {
     const { writeGeminiSession } = await import('../transfer/writers.js');
     const filePath = await writeGeminiSession(mockSession, '/Users/test/project');
 
-    expect(filePath).toContain('.json');
+    expect(filePath).toContain('.jsonl');
 
     const content = await fs.readFile(filePath, 'utf-8');
-    const data = JSON.parse(content);
+    const lines = content.trim().split('\n').map(l => JSON.parse(l));
 
-    expect(data[TRANSFER_MARKER]).toBeDefined();
-    expect(data[TRANSFER_MARKER].source_agent).toBe('claude');
-    expect(data.messages).toHaveLength(4);
-    expect(data.messages[0].type).toBe('user');
-    expect(data.messages[0].content[0].text).toBe('Hello');
-    expect(data.messages[1].type).toBe('gemini');
-    expect(data.messages[1].content).toBe('Hi there!');
+    // Line 0: metadata with transfer marker
+    const meta = lines[0];
+    expect(meta[TRANSFER_MARKER]).toBeDefined();
+    expect(meta[TRANSFER_MARKER].source_agent).toBe('claude');
+
+    // Following lines: messages
+    const msgs = lines.slice(1);
+    expect(msgs).toHaveLength(4);
+    expect(msgs[0].type).toBe('user');
+    expect(msgs[0].content[0].text).toBe('Hello');
+    expect(msgs[1].type).toBe('gemini');
+    expect(msgs[1].content).toBe('Hi there!');
   });
 
   it('roundtrips correctly through parse', async () => {
@@ -125,12 +130,13 @@ describe('writeCodexSession', () => {
     const content = await fs.readFile(filePath, 'utf-8');
     const lines = content.trim().split('\n').map(l => JSON.parse(l));
 
-    // First line: transfer marker
-    expect(lines[0].type).toBe(TRANSFER_MARKER);
+    // First line: session_meta (Codex /resume requires this as line 1)
+    expect(lines[0].type).toBe('session_meta');
+    expect(lines[0].payload.cwd).toBe('/Users/test/project');
 
-    // Second line: session_meta
-    expect(lines[1].type).toBe('session_meta');
-    expect(lines[1].payload.cwd).toBe('/Users/test/project');
+    // Transfer marker is embedded inside the payload
+    expect(lines[0].payload[TRANSFER_MARKER]).toBeDefined();
+    expect(lines[0].payload[TRANSFER_MARKER].source_agent).toBe('claude');
 
     // Check user/assistant messages exist
     const userItems = lines.filter(l => l.type === 'response_item' && l.payload?.role === 'user');
