@@ -16,10 +16,11 @@
 
 ## 功能
 
-- **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
-- **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md`），讓 agent 自己偵測額度、主動建議交接。
-- **`append`**：把另一個 agent 做過的進度回寫到既有 session，方便來回切換。用訊息內容（role + text）去重，重複執行也安全。
+- **`install`**：把一段 handoff 指示注入各 agent 的全域 system prompt（`~/.claude/CLAUDE.md`、`~/.gemini/GEMINI.md`、`~/.codex/AGENTS.md`），讓 agent 知道有這個工具的存在，當使用者提出類似的需求時，agent 會主動建議使用、並且提供轉移指令。
 - **`list`**：列出目前專案所有 session，附帶最後一則使用者訊息、訊息數、時間區間。
+- **`peek`**：預覽某個 session 最後 N 則訊息的實際內容（預設 20 則）。轉移前用來確認 session 裡有什麼。
+- **`transfer`**：把 Claude / Gemini / Codex 的 session 檔轉成另一家的原生格式，寫入對方的 session 目錄。
+- **`append`**：把另一個 agent 做過的進度回寫到既有 session，方便來回切換。用訊息內容（role + text）去重，重複執行也安全。
 
 ## 安裝
 
@@ -63,6 +64,20 @@ save-my-session list --from claude
 <p align="center">
   <img src="https://raw.githubusercontent.com/guggg/save-my-session/main/docs/demo-list.zh.svg" alt="list 示範" width="760">
 </p>
+
+### 預覽 session 內容
+
+預覽最新 session 的最後 20 則訊息：
+
+```bash
+save-my-session peek --from gemini
+```
+
+指定特定 session（用 hash）或調整顯示數量：
+
+```bash
+save-my-session peek --from claude --session a1b2c3d --tail 10
+```
 
 ### 轉移 session
 
